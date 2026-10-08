@@ -14,8 +14,15 @@
   "author": "",
   "type": "commonjs",
   "main": "index.js",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "concurrently -c \"cyan.bold,blue.bold,green.bold\" -n \"BACKEND,FRONTEND\" \"npm run dev -w backend\" \"npm run dev -w frontend\""
+
   },
   "dependencies": {
     "detect-libc": "^2.1.2",
@@ -37,5 +44,7 @@
     "tinyglobby": "^0.2.17",
     "vite": "^8.3.3"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
 }
