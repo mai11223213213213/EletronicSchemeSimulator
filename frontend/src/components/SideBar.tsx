@@ -1,12 +1,12 @@
 import React from 'react';
 import {type ComponentType } from '../types/cricut';
-import { Battery, Zap, Lightbulb, ToggleLeft } from 'lucide-react';
+import { Battery, Zap, Lightbulb, ToggleLeft, X } from 'lucide-react';
 
 interface SidebarProps {
-  onAddElement: (type: ComponentType, x: number, y: number) => void;
+  onClose: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = () => {
+export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const handleDragStart = (e: React.DragEvent, type: ComponentType) => {
     // Передаємо лише рядок типу елемента
     e.dataTransfer.setData('text/plain', type);
@@ -14,13 +14,24 @@ export const Sidebar: React.FC<SidebarProps> = () => {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 p-4 flex flex-col gap-4 shadow-sm select-none z-10">
-      <h2 className="text-md font-bold text-gray-800 border-b pb-2">Компоненти схеми</h2>
-      <div className="flex flex-col gap-3">
+    <aside className="flex h-full w-full flex-col gap-3 overflow-hidden rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur select-none">
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 pb-2">
+        <h2 className="text-sm font-bold text-gray-800">Компоненти схеми</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+          aria-label="Hide components"
+          title="Hide components"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
         <div
           draggable
           onDragStart={(e) => handleDragStart(e, 'battery')}
-          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
+          className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 p-3 cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
         >
           <Battery className="w-5 h-5 text-blue-600" />
           <span className="text-sm font-medium text-gray-700">Джерело живлення</span>
@@ -29,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         <div
           draggable
           onDragStart={(e) => handleDragStart(e, 'resistor')}
-          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
+          className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 p-3 cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
         >
           <Zap className="w-5 h-5 text-amber-600" />
           <span className="text-sm font-medium text-gray-700">Резистор</span>
@@ -38,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         <div
           draggable
           onDragStart={(e) => handleDragStart(e, 'lamp')}
-          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
+          className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 p-3 cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
         >
           <Lightbulb className="w-5 h-5 text-yellow-500" />
           <span className="text-sm font-medium text-gray-700">Лампа розжарювання</span>
@@ -47,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         <div
           draggable
           onDragStart={(e) => handleDragStart(e, 'switch')}
-          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
+          className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 p-3 cursor-grab hover:bg-blue-50 hover:border-blue-300 transition"
         >
           <ToggleLeft className="w-5 h-5 text-purple-600" />
           <span className="text-sm font-medium text-gray-700">Вимикач</span>

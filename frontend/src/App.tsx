@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
-import { Sidebar } from './components/SideBar';
-import { Canvas } from './components/Canvas';
+import { CircuitWorkspace } from './components/CircuitWorkspace';
 import { useCircuitEditor } from './Logic/useCircuitEditor';
 
 export default function App() {
@@ -26,12 +25,11 @@ export default function App() {
   }, [selectedId]);
 
   return (
-    <div className="flex h-screen w-screen bg-gray-100 overflow-hidden">
-      <Sidebar onAddElement={addElement} />
-      <Canvas
+    <div className="flex h-screen w-screen overflow-hidden bg-gray-100">
+      <CircuitWorkspace
         elements={elements}
         wires={wires}
-        onDropElement={addElement}
+        onAddElement={addElement}
         onSelectElement={setSelectedId}
         selectedId={selectedId}
         onMoveElement={moveElement}
