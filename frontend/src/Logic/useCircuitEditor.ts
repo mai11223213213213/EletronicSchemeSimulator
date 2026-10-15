@@ -32,7 +32,7 @@ export const useCircuitEditor = () => {
   const rotateSelected = () => {
     if (!selectedId) return;
     setElements((prev) =>
-      prev.map((el) => (el.id === selectedId ? { ...el, rotation: (el.rotation + 90) % 360 } : el))
+      prev.map((el) => (el.id === selectedId ? { ...el, rotation: (el.rotation + 45) % 360 } : el))
     );
   };
 
