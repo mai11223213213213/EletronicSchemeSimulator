@@ -15,7 +15,7 @@ interface Props {
 export function GridSettings({ cellPx, visible, onCellPx, onVisible }: Props) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="absolute bottom-4 right-4 z-20 flex items-end gap-2" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute bottom-4 right-4 z-30 flex items-end gap-2" onClick={(e) => e.stopPropagation()}>
       {open && (
         <div className="w-64 rounded-md border border-gray-200 bg-white/95 p-4 shadow-xl backdrop-blur">
           <div className="mb-4 flex items-center justify-between">

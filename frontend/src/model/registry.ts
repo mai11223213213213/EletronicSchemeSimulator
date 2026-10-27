@@ -38,8 +38,11 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
     ],
     halfW: 35,
     halfH: 20,
-    defaults: { voltage: 9 },
-    fields: [{ key: 'voltage', label: 'Voltage', unit: 'V', min: 0 }],
+    defaults: { voltage: 9, internalResistance: 0.1 },
+    fields: [
+      { key: 'voltage', label: 'Voltage', unit: 'V', min: 0 },
+      { key: 'internalResistance', label: 'Internal R', unit: 'Ω', min: 0.001 },
+    ],
     format: (p) => `${p.voltage} V`,
   },
   resistor: {
@@ -50,8 +53,11 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
     ],
     halfW: 35,
     halfH: 15,
-    defaults: { resistance: 100 },
-    fields: [{ key: 'resistance', label: 'Resistance', unit: 'Ω', min: 0 }],
+    defaults: { resistance: 100, maxPower: 2 },
+    fields: [
+      { key: 'resistance', label: 'Resistance', unit: 'Ω', min: 0 },
+      { key: 'maxPower', label: 'Rated power', unit: 'W', min: 0.001 },
+    ],
     format: (p) => `${p.resistance} Ω`,
   },
   lamp: {
@@ -62,8 +68,11 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
     ],
     halfW: 35,
     halfH: 20,
-    defaults: { resistance: 50 },
-    fields: [{ key: 'resistance', label: 'Resistance', unit: 'Ω', min: 0 }],
+    defaults: { resistance: 50, ratedPower: 2 },
+    fields: [
+      { key: 'resistance', label: 'Resistance', unit: 'Ω', min: 0 },
+      { key: 'ratedPower', label: 'Rated power', unit: 'W', min: 0.001 },
+    ],
     format: (p) => `${p.resistance} Ω`,
   },
   switch: {
@@ -75,6 +84,31 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
     halfW: 35,
     halfH: 20,
     defaults: { closed: false },
+    fields: [],
+    format: () => '',
+  },
+  // Meters are real instruments: the ammeter goes IN SERIES (≈0 Ω), the voltmeter goes ACROSS a part (≈∞ Ω).
+  ammeter: {
+    label: 'Ammeter',
+    pins: [
+      { id: 'a', x: -30, y: 0, dir: 'W' },
+      { id: 'b', x: 30, y: 0, dir: 'E' },
+    ],
+    halfW: 35,
+    halfH: 20,
+    defaults: {},
+    fields: [],
+    format: () => '',
+  },
+  voltmeter: {
+    label: 'Voltmeter',
+    pins: [
+      { id: 'a', x: -30, y: 0, dir: 'W' },
+      { id: 'b', x: 30, y: 0, dir: 'E' },
+    ],
+    halfW: 35,
+    halfH: 20,
+    defaults: {},
     fields: [],
     format: () => '',
   },

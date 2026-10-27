@@ -3,6 +3,7 @@ import { COMPONENT_TYPES, REGISTRY } from '../model/registry'
 import type { ComponentType } from '../model/types'
 import { BatteryElement } from './Elements/BatteryElement'
 import { LampElement } from './Elements/LampElement'
+import { MeterElement } from './Elements/MeterElement'
 import { ResistorElement } from './Elements/ResistorElement'
 import { SwitchElement } from './Elements/SwitchElement'
 
@@ -12,6 +13,8 @@ const SYMBOLS: Record<ComponentType, React.ReactNode> = {
   resistor: <ResistorElement />,
   lamp: <LampElement />,
   switch: <SwitchElement closed />,
+  ammeter: <MeterElement letter="A" rotation={0} />,
+  voltmeter: <MeterElement letter="V" rotation={0} />,
 }
 
 export function Sidebar({ onClose }: { onClose: () => void }) {
