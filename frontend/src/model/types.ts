@@ -5,7 +5,7 @@ export type ComponentType = 'battery' | 'resistor' | 'lamp' | 'switch'
 /** Direction a pin "faces" (the way a wire should leave it). */
 export type Dir = 'N' | 'E' | 'S' | 'W'
 export type Axis = 'h' | 'v'
-export type Rotation = 0 | 90 | 180 | 270
+export type Rotation = 0 | 45 | 90 | 135 | 180 | 225 | 270 | 315
 
 export interface Point {
   x: number

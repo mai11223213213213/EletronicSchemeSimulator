@@ -6,28 +6,27 @@ import type {
 export const snap = (v: number, step = GRID) => Math.round(v / step) * step
 export const snapPoint = (p: Point): Point => ({ x: snap(p.x), y: snap(p.y) })
 
-/** Rotate a local point by 0/90/180/270 degrees (clockwise on screen, y points down). */
+/** Rotate a local point by a multiple of 45 degrees (clockwise on screen, y points down). */
 export function rotatePoint(p: Point, rotation: Rotation): Point {
-  const r = ((): Point => {
-    switch (rotation) {
-      case 90: return { x: -p.y, y: p.x }
-      case 180: return { x: -p.x, y: -p.y }
-      case 270: return { x: p.y, y: -p.x }
-      default: return { x: p.x, y: p.y }
-    }
-  })()
-  return { x: r.x + 0, y: r.y + 0 } // "+ 0" turns -0 into 0 so saved data and comparisons stay clean
+  const rad = (rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  // Round to 2 decimals so trig noise (6e-16) never breaks exact comparisons; '+ 0' turns -0 into 0.
+  const clean = (v: number) => Math.round(v * 100) / 100 + 0
+  return { x: clean(p.x * cos - p.y * sin), y: clean(p.x * sin + p.y * cos) }
 }
 
 const DIRS: Dir[] = ['N', 'E', 'S', 'W']
+/** Pin direction after rotating. At 45-degree steps wires still leave along a grid axis, so snap to the nearest of N/E/S/W. */
 export function rotateDir(dir: Dir, rotation: Rotation): Dir {
-  return DIRS[(DIRS.indexOf(dir) + rotation / 90) % 4]
+  const angle = DIRS.indexOf(dir) * 90 + rotation
+  return DIRS[Math.round(angle / 90) % 4]
 }
 
 export const axisOfDir = (d: Dir): Axis => (d === 'E' || d === 'W' ? 'h' : 'v')
 
 export function nextRotation(r: Rotation): Rotation {
-  return ((r + 90) % 360) as Rotation
+  return ((r + 45) % 360) as Rotation
 }
 
 /** World position + exit axis of a pin of a placed element. */
