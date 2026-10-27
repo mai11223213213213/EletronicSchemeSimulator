@@ -1,186 +1,171 @@
-import React, { useState, useEffect } from 'react';
-import {type CircuitElement, type Wire, type ComponentType } from '../types/cricut';
-import { ResistorElement } from './Elements/ResistorElement';
-import { BatteryElement } from './Elements/BatteryElement';
-import { LampElement } from './Elements/LampElement';
-import { SwitchElement } from './Elements/SwitchElement';
-import { Grid2X2, Settings2 } from 'lucide-react';
+import { HelpCircle } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { endpointPos, snapPoint } from '../model/geometry'
+import { GRID, isComponentType } from '../model/registry'
+import { routeOrthogonal, toPathData } from '../model/routing'
+import type { CircuitElement, Point } from '../model/types'
+import { useCircuitStore } from '../store/circuitStore'
+import { ElementView } from './ElementView'
+import { GridSettings } from './GridSettings'
+import { PinLayer } from './PinLayer'
+import { PropertiesPanel } from './PropertiesPanel'
+import { WireLayer } from './WireLayer'
 
-interface CanvasProps {
-  elements: CircuitElement[];
-  wires: Wire[];
-  onDropElement: (type: ComponentType, x: number, y: number) => void;
-  onSelectElement: (id: string | null) => void;
-  selectedId: string | null;
-  onMoveElement: (id: string, x: number, y: number) => void;
-}
+export function Canvas() {
+  const elements = useCircuitStore((s) => s.elements)
+  const wires = useCircuitStore((s) => s.wires)
+  const junctions = useCircuitStore((s) => s.junctions)
+  const selection = useCircuitStore((s) => s.selection)
+  const draft = useCircuitStore((s) => s.draft)
+  const st = useCircuitStore.getState // actions are stable; always read fresh state through this
 
-const MIN_GRID_SIZE = 5;
-const MAX_GRID_SIZE = 30;
+  const [cellPx, setCellPx] = useState(GRID)
+  const [gridVisible, setGridVisible] = useState(true)
+  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
 
-export const Canvas: React.FC<CanvasProps> = ({
-  elements,
-  wires,
-  onDropElement,
-  onSelectElement,
-  selectedId,
-  onMoveElement,
-}) => {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [gridSize, setGridSize] = useState(10);
-  const [gridVisible, setGridVisible] = useState(true);
-  const [gridSettingsOpen, setGridSettingsOpen] = useState(false);
+  const worldRef = useRef<SVGGElement>(null) // the <g> that carries the zoom transform
+  const scale = cellPx / GRID
+  const drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null)
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  };
+  useKeyboardShortcuts()
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const rawX = e.clientX - rect.left;
-    const rawY = e.clientY - rect.top;
+  /** Screen position -> world units (what the model uses). Asks the browser, so zoom/scroll just work. */
+  const toWorld = useCallback((clientX: number, clientY: number): Point => {
+    const m = worldRef.current?.getScreenCTM()
+    if (!m) return { x: 0, y: 0 }
+    const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse())
+    return { x: p.x, y: p.y }
+  }, [])
 
-    const x = Math.round(rawX / gridSize) * gridSize;
-    const y = Math.round(rawY / gridSize) * gridSize;
-
-    const type = e.dataTransfer.getData('text/plain') as ComponentType;
-    if (!type) return;
-
-    onDropElement(type, x, y);
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, el: CircuitElement) => {
-    e.stopPropagation();
-    onSelectElement(el.id);
-    setDraggingId(el.id);
-    setDragOffset({ x: e.clientX - el.x, y: e.clientY - el.y });
-  };
-
+  // ---- dragging parts -------------------------------------------------------
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!draggingId) return;
-      const rawX = e.clientX - dragOffset.x;
-      const rawY = e.clientY - dragOffset.y;
-
-      const x = Math.round(rawX / gridSize) * gridSize;
-      const y = Math.round(rawY / gridSize) * gridSize;
-
-      onMoveElement(draggingId, x, y);
-    };
-
-    const handleMouseUp = () => {
-      setDraggingId(null);
-    };
-
-    if (draggingId) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+    const onMove = (e: MouseEvent) => {
+      const d = drag.current
+      if (!d) return
+      const w = toWorld(e.clientX, e.clientY)
+      const p = snapPoint({ x: w.x - d.dx, y: w.y - d.dy })
+      const el = st().elements.find((x) => x.id === d.id)
+      if (!el || (el.x === p.x && el.y === p.y)) return
+      if (!d.moved) { st().beginMove(); d.moved = true } // one undo step per drag
+      st().moveElement(d.id, p.x, p.y)
     }
-
+    const onUp = () => { drag.current = null }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [draggingId, dragOffset, gridSize, onMoveElement]);
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [st, toWorld])
 
+  const onElementMouseDown = (e: React.MouseEvent, el: CircuitElement) => {
+    e.stopPropagation()
+    if (st().draft) return
+    st().select({ kind: 'element', id: el.id })
+    const w = toWorld(e.clientX, e.clientY)
+    drag.current = { id: el.id, dx: w.x - el.x, dy: w.y - el.y, moved: false }
+  }
+
+  // ---- drop from the sidebar -----------------------------------------------
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const type = e.dataTransfer.getData('text/plain')
+    if (!isComponentType(type)) return
+    const p = snapPoint(toWorld(e.clientX, e.clientY))
+    st().addElement(type, p.x, p.y)
+  }
+
+  // ---- wiring ---------------------------------------------------------------
+  const onPinClick = (e: React.MouseEvent, elementId: string, pinId: string) => {
+    e.stopPropagation()
+    const ep = { kind: 'pin', elementId, pinId } as const
+    if (st().draft) st().finishWire(ep)
+    else st().startWire(ep)
+  }
+  const onJunctionClick = (e: React.MouseEvent, junctionId: string) => {
+    e.stopPropagation()
+    const ep = { kind: 'junction', junctionId } as const
+    if (st().draft) st().finishWire(ep)
+    else st().startWire(ep)
+  }
+  const onWireClick = (e: React.MouseEvent, wireId: string) => {
+    e.stopPropagation()
+    if (st().draft) st().finishWireOnWire(wireId, toWorld(e.clientX, e.clientY))
+    else st().select({ kind: 'wire', id: wireId })
+  }
+  const onBackgroundClick = (e: React.MouseEvent) => {
+    if (st().draft) st().addBend(snapPoint(toWorld(e.clientX, e.clientY)))
+    else st().select(null)
+  }
+
+  // live preview of the wire being drawn
+  const start = draft ? endpointPos(draft.from, elements, junctions) : null
+  const previewD = draft && start
+    ? toPathData(routeOrthogonal(start, draft.bends, cursor, start.axis, null))
+    : null
+
+  const cell = cellPx
   return (
     <div
-      className="flex-1 bg-slate-50 relative overflow-hidden cursor-crosshair select-none h-full"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onClick={() => onSelectElement(null)}
+      className="relative h-full flex-1 select-none overflow-hidden bg-slate-50"
+      onDrop={onDrop}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
     >
-      {/* Сітка фону */}
-      <svg className="w-full h-full absolute inset-0 pointer-events-none">
+      <svg
+        className={`absolute inset-0 h-full w-full ${draft ? 'cursor-crosshair' : ''}`}
+        onClick={onBackgroundClick}
+        onMouseMove={(e) => draft && setCursor(snapPoint(toWorld(e.clientX, e.clientY)))}
+        onContextMenu={(e) => { if (draft) { e.preventDefault(); st().cancelWire() } }}
+      >
         <defs>
-          <pattern id="grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">
-            <circle cx={gridSize / 2} cy={gridSize / 2} r="1" fill="#cbd5e1" />
+          {/* shifted by half a cell so the dot sits in the tile centre (no clipping) yet lands on grid points */}
+          <pattern id="grid" width={cell} height={cell} x={-cell / 2} y={-cell / 2} patternUnits="userSpaceOnUse">
+            <circle cx={cell / 2} cy={cell / 2} r="1" fill="#cbd5e1" />
           </pattern>
         </defs>
         {gridVisible && <rect width="100%" height="100%" fill="url(#grid)" />}
 
-        {/* Дроти */}
-        {wires.map((wire) => (
-          <line key={wire.id} x1="0" y1="0" x2="100" y2="100" stroke="#2563eb" strokeWidth="2.5" />
-        ))}
-      </svg>
-
-      {/* Елементи на полотні */}
-      <svg className="w-full h-full absolute inset-0">
-        {elements.map((el) => {
-          const isSelected = el.id === selectedId;
-          return (
-            <g
+        {/* everything below lives in world units; zoom = scale */}
+        <g ref={worldRef} transform={`scale(${scale})`}>
+          <WireLayer
+            data={{ elements, wires, junctions }}
+            selection={selection}
+            onWireClick={onWireClick}
+            onJunctionClick={onJunctionClick}
+          />
+          {elements.map((el) => (
+            <ElementView
               key={el.id}
-              transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation})`}
-              onMouseDown={(e) => handleMouseDown(e, el)}
-              className="cursor-move"
-            >
-              {el.type === 'resistor' && <ResistorElement isSelected={isSelected} />}
-              {el.type === 'battery' && <BatteryElement isSelected={isSelected} />}
-              {el.type === 'lamp' && <LampElement isSelected={isSelected} />}
-              {el.type === 'switch' && <SwitchElement isSelected={isSelected} />}
-            </g>
-          );
-        })}
+              element={el}
+              selected={selection?.kind === 'element' && selection.id === el.id}
+              onMouseDown={onElementMouseDown}
+              onToggle={(x) => st().toggleSwitch(x.id)}
+            />
+          ))}
+          <PinLayer data={{ elements, wires, junctions }} drawing={!!draft} onPinClick={onPinClick} />
+          {previewD && (
+            <path d={previewD} stroke="#2563eb" strokeWidth="2" strokeDasharray="5 4" fill="none" pointerEvents="none" />
+          )}
+        </g>
       </svg>
 
-      <div className={`absolute bottom-4 right-4 z-20 flex items-end gap-2 ${gridSettingsOpen ? 'flex-row' : ''}`}>
-        {gridSettingsOpen && (
-          <div className="w-64 rounded-md border border-gray-200 bg-white/95 p-4 shadow-xl backdrop-blur">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                <Grid2X2 className="h-4 w-4 text-gray-900" />
-                Grid settings
-              </div>
-              <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
-                {gridSize} px
-              </span>
-            </div>
-            <label className="mb-2 flex items-center justify-between text-sm text-gray-700">
-              <span>Show grid</span>
-              <input
-                type="checkbox"
-                checked={gridVisible}
-                onChange={(event) => setGridVisible(event.target.checked)}
-                className="h-4 w-4 accent-blue-600"
-              />
-            </label>
-            <label className="block text-sm text-gray-700" htmlFor="grid-size">
-              Grid scale
-            </label>
-            <input
-              id="grid-size"
-              type="range"
-              min={MIN_GRID_SIZE}
-              max={MAX_GRID_SIZE}
-              step="1"
-              value={gridSize}
-              onChange={(event) => setGridSize(Number(event.target.value))}
-              className="mt-2 w-full accent-blue-600"
-            />
-            <div className="mt-1 flex justify-between text-xs text-gray-500">
-              <span>{MIN_GRID_SIZE} px</span>
-              <span>{MAX_GRID_SIZE} px</span>
-            </div>
-          </div>
-        )}
+      <div className="group absolute right-4 top-3 z-30" onClick={(e) => e.stopPropagation()}>
         <button
-          type="button"
-          onClick={() => setGridSettingsOpen((open) => !open)}
-          aria-expanded={gridSettingsOpen}
-          aria-label={gridSettingsOpen ? 'Close grid settings' : 'Open grid settings'}
-          title="Grid settings"
-          className="flex shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur transition hover:bg-white"
+          type="button" title="Controls" aria-label="Show controls hint"
+          className="rounded-full bg-white/90 p-1.5 text-gray-500 shadow hover:text-blue-600 focus:text-blue-600"
         >
-          <Settings2 className="h-4 w-4 text-gray-900" />
-          <span>Grid</span>
-          <span className="text-xs text-gray-500">{gridSize}px</span>
+          <HelpCircle className="h-5 w-5" />
         </button>
+        <div className="pointer-events-none absolute right-full top-0 mr-2 hidden w-64 rounded-md bg-white px-3 py-2 text-xs text-gray-600 shadow-lg group-focus-within:block group-hover:block">
+          {draft
+            ? 'Click canvas — add bend · click pin/wire — finish · Esc — cancel'
+            : 'Click pin — new wire · R — rotate · Del — delete · Ctrl+Z — undo'}
+        </div>
       </div>
+
+      <PropertiesPanel />
+      <GridSettings cellPx={cellPx} visible={gridVisible} onCellPx={setCellPx} onVisible={setGridVisible} />
     </div>
-  );
-};
+  )
+}

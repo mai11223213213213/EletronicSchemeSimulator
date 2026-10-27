@@ -1,60 +1,51 @@
-import React from 'react';
-import type { ComponentType } from '../types/cricut';
-import { X } from 'lucide-react';
-import { BatteryElement } from './Elements/BatteryElement';
-import { LampElement } from './Elements/LampElement';
-import { ResistorElement } from './Elements/ResistorElement';
-import { SwitchElement } from './Elements/SwitchElement';
+import { X } from 'lucide-react'
+import { COMPONENT_TYPES, REGISTRY } from '../model/registry'
+import type { ComponentType } from '../model/types'
+import { BatteryElement } from './Elements/BatteryElement'
+import { LampElement } from './Elements/LampElement'
+import { ResistorElement } from './Elements/ResistorElement'
+import { SwitchElement } from './Elements/SwitchElement'
 
-interface SidebarProps {
-  onClose: () => void;
+// The palette shows the same symbols that get drawn on the canvas (names/pins/defaults are in model/registry.ts).
+const SYMBOLS: Record<ComponentType, React.ReactNode> = {
+  battery: <BatteryElement rotation={0} />,
+  resistor: <ResistorElement />,
+  lamp: <LampElement />,
+  switch: <SwitchElement closed />,
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
-  const components = [
-    { type: 'battery', name: 'Battery', preview: BatteryElement, viewBox: '0 -20 60 45' },
-    { type: 'resistor', name: 'Resistor', preview: ResistorElement, viewBox: '0 -12 60 34' },
-    { type: 'lamp', name: 'Lamp', preview: LampElement, viewBox: '-12 -18 64 46' },
-    { type: 'switch', name: 'Switch', preview: SwitchElement, viewBox: '0 -18 60 40' },
-  ] as const;
-
-  const handleDragStart = (e: React.DragEvent, type: ComponentType) => {
-    // Передаємо лише рядок типу елемента
-    e.dataTransfer.setData('text/plain', type);
-    e.dataTransfer.effectAllowed = 'copy';
-  };
-
+export function Sidebar({ onClose }: { onClose: () => void }) {
   return (
-    <aside className="flex h-full w-full flex-col gap-3 overflow-hidden rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur select-none">
+    <aside className="flex h-full w-full select-none flex-col gap-3 overflow-hidden rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
       <div className="flex shrink-0 items-center justify-between border-b border-gray-200 pb-2">
-        <h2 className="text-sm font-bold text-gray-800">Components</h2>
+        <h2 className="text-sm font-bold text-gray-800">Circuit components</h2>
         <button
-          type="button"
-          onClick={onClose}
+          type="button" onClick={onClose} title="Hide components" aria-label="Hide components"
           className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-          aria-label="Hide components"
-          title="Hide components"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="grid min-h-0 grid-cols-2 content-start gap-2 overflow-y-auto">
-        {components.map(({ type, name, preview: Preview, viewBox }) => (
-          <button
-            key={type}
-            type="button"
-            draggable
-            onDragStart={(event) => handleDragStart(event, type)}
-            className="flex min-h-28 flex-col items-center justify-center gap-2 rounded border border-gray-200 bg-white px-2 py-3 text-gray-800 transition hover:border-gray-300 hover:bg-gray-50 active:cursor-grabbing"
-            aria-label={`Drag ${name} to canvas`}
-          >
-            <svg viewBox={viewBox} className="h-14 w-full overflow-visible" aria-hidden="true">
-              <Preview />
-            </svg>
-            <span className="text-xs font-medium text-gray-700">{name}</span>
-          </button>
-        ))}
+      <div className="grid min-h-0 grid-cols-2 content-start gap-3 overflow-y-auto">
+        {COMPONENT_TYPES.map((type) => {
+          return (
+            <div
+              key={type}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', type)
+                e.dataTransfer.effectAllowed = 'copy'
+              }}
+              className="group flex cursor-grab flex-col items-center gap-1.5"
+            >
+              <div className="flex aspect-square w-full items-center justify-center rounded-2xl border-2 border-gray-300 bg-gray-50 transition group-hover:border-blue-400 group-hover:bg-blue-50">
+                <svg viewBox="-38 -24 76 48" className="w-4/5" pointerEvents="none">{SYMBOLS[type]}</svg>
+              </div>
+              <span className="text-center text-xs font-medium leading-tight text-gray-700">{REGISTRY[type].label}</span>
+            </div>
+          )
+        })}
       </div>
     </aside>
-  );
-};
+  )
+}
