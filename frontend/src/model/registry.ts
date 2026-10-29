@@ -2,6 +2,7 @@ import {
   CAPACITOR_DEFAULTS, CAPACITOR_MODES, DIELECTRICS, capacitance, capacitorHelp, capacitorReadouts, isConstruction,
   normalizeCapacitor,
 } from './capacitor'
+import { AC_DEFAULTS, AC_HELP, WAVEFORMS, acReadouts } from './sources'
 import type { ComponentType, ElementProps, PinDef } from './types'
 import { formatSI } from './units'
 
@@ -67,7 +68,7 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
     defaults: { voltage: 9, internalResistance: 0.1 },
     fields: [
       { key: 'voltage', label: 'Voltage', unit: 'V', min: 0 },
-      { key: 'internalResistance', label: 'Internal R', unit: 'Ω', min: 0.001 },
+      { key: 'internalResistance', label: 'Internal R (real)', unit: 'Ω', min: 0.001 },
     ],
     format: (p) => `${p.voltage} V`,
   },
@@ -185,6 +186,7 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
       { key: 'plateDistance', label: 'Plate gap', unit: 'µm', min: 0.01, show: isConstruction },
       { key: 'dielectric', label: 'Filled with', unit: '', min: 0, options: DIELECTRICS.map((d) => d.name), show: isConstruction },
       { key: 'maxVoltage', label: 'Rated voltage', unit: 'V', min: 0.1 },
+      { key: 'esr', label: 'ESR (real)', unit: 'Ω', min: 0 },
     ],
     format: (p) => formatSI(capacitance(p), 'F'),
     readouts: capacitorReadouts,
@@ -199,8 +201,12 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
     ],
     halfW: 35,
     halfH: 16,
-    defaults: { inductance: 100 },
-    fields: [{ key: 'inductance', label: 'Inductance', unit: 'mH', min: 0.001 }],
+    // dcr = resistance of the copper winding, Ω: only the "real" model uses it
+    defaults: { inductance: 100, dcr: 1 },
+    fields: [
+      { key: 'inductance', label: 'Inductance', unit: 'mH', min: 0.001 },
+      { key: 'dcr', label: 'Winding R (real)', unit: 'Ω', min: 0 },
+    ],
     format: (p) => `${p.inductance} mH`,
   },
   fuse: {
@@ -228,6 +234,40 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
       { key: 'resistance', label: 'Resistance', unit: 'Ω', min: 0 },
       { key: 'ratedPower', label: 'Rated power', unit: 'W', min: 0.001 },
     ],
+    format: () => '',
+  },
+  // AC source (function generator): pin "plus" is the one that is positive during the first half of a sine.
+  acsource: {
+    label: 'AC source',
+    pins: [
+      { id: 'plus', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'minus', x: PIN_REACH, y: 0, dir: 'E' },
+    ],
+    halfW: 35,
+    halfH: 20,
+    defaults: { ...AC_DEFAULTS },
+    fields: [
+      { key: 'amplitude', label: 'Amplitude (peak)', unit: 'V', min: 0 },
+      { key: 'frequency', label: 'Frequency', unit: 'Hz', min: 0.1 },
+      { key: 'waveform', label: 'Waveform', unit: '', min: 0, options: WAVEFORMS },
+      { key: 'offset', label: 'DC offset', unit: 'V', min: -1000 },
+      { key: 'internalResistance', label: 'Internal R (real)', unit: 'Ω', min: 0.001 },
+    ],
+    format: (p) => `${p.amplitude} V · ${p.frequency} Hz`,
+    readouts: acReadouts,
+    help: () => AC_HELP,
+  },
+  // Oscilloscope probe: measures the voltage across its two pins and draws the waveform on its screen.
+  scope: {
+    label: 'Oscilloscope',
+    pins: [
+      { id: 'a', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'b', x: PIN_REACH, y: 0, dir: 'E' },
+    ],
+    halfW: 35,
+    halfH: 20,
+    defaults: {},
+    fields: [],
     format: () => '',
   },
 }

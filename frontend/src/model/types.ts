@@ -3,6 +3,7 @@
 export type ComponentType =
   | 'battery' | 'resistor' | 'lamp' | 'switch' | 'ammeter' | 'voltmeter'
   | 'diode' | 'led' | 'capacitor' | 'inductor' | 'fuse' | 'motor'
+  | 'acsource' | 'scope'
 
 /** Direction a pin "faces" (the way a wire should leave it). */
 export type Dir = 'N' | 'E' | 'S' | 'W'

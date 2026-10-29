@@ -2,6 +2,7 @@ import { Activity, PanelTopOpen, Play, Square } from 'lucide-react'
 import { useState } from 'react'
 import { useConsoleVisible, useHasReadout, useSimStore } from '../store/simStore'
 import { Canvas } from './Canvas'
+import { ModelSwitch } from './ModelSwitch'
 import { PropertiesPanel } from './PropertiesPanel'
 import { Sidebar } from './SideBar'
 import { SimulationConsole } from './SimulationConsole'
@@ -54,16 +55,19 @@ export function CircuitWorkspace() {
       )}
 
       {/* top centre normally; bottom centre on a narrow screen, where the top corners are taken */}
-      <button
-        type="button"
-        onClick={running ? stop : startSimulation}
-        className={`absolute left-1/2 top-3 z-20 inline-flex -translate-x-1/2 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white shadow-lg max-[899px]:bottom-4 max-[899px]:top-auto ${
-          running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
-        }`}
-      >
-        {running ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        {running ? 'Stop simulation' : 'Start simulation'}
-      </button>
+      <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 max-[899px]:bottom-4 max-[899px]:top-auto">
+        <button
+          type="button"
+          onClick={running ? stop : startSimulation}
+          className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white shadow-lg ${
+            running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+          }`}
+        >
+          {running ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {running ? 'Stop simulation' : 'Start simulation'}
+        </button>
+        <ModelSwitch />
+      </div>
 
       {/*
         Right column: below the "?" hint button, above the Grid button. Properties and readout are laid out

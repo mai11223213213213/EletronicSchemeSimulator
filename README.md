@@ -8,13 +8,16 @@ Drag parts onto the canvas, connect them with wires, press **Start simulation**,
 
 **Editor**
 - Drag parts from the components list onto a grid canvas.
-- Parts: power source, resistor, incandescent lamp, switch, ammeter, voltmeter, diode, LED, capacitor, inductor, fuse, motor (fan).
+- Parts: power source, resistor, incandescent lamp, switch, ammeter, voltmeter, diode, LED, capacitor, inductor, fuse, motor (fan), AC source (sine / square / triangle) and oscilloscope.
 - Wires are straight (horizontal/vertical, routed automatically) or diagonal (free angle). Click the canvas to add bends, drag the bends of a selected wire to reshape it, or click an existing wire to make a T-junction.
 - Rotate parts in 45° steps, move them with the mouse, edit their values in the properties panel.
 - Undo / redo, grid on/off and zoom.
 
 **Simulation**
 - **Circuit check before start:** there must be a power source, every pin must be wired, and every part must lie on a closed loop. Problems are listed and the offending parts are outlined in red.
+- **AC and DC:** an AC source (amplitude, frequency, waveform, DC offset) drives the circuit in real time. Meters and the readout show RMS values and peaks; an oscilloscope draws the waveform; lamps and resistors react to average power, LEDs to average current.
+- **Ideal or real:** the **Ideal / Real** switch next to Start chooses the physics. Ideal = perfect sources, wires and instruments, no ESR or winding resistance, a diode that drops almost nothing. Real = source internal resistance, capacitor ESR, inductor winding resistance, 0.7 V diode drop, real meters. It can be changed while the simulation runs.
+- **Numerics:** each part is replaced by a conductance plus a current source and the circuit is solved per time step (nodal analysis); capacitors and inductors use a 2nd-order integrator (BDF2), diodes use Newton iterations.
 - **DC solver:** nodal analysis (Kirchhoff's current law, solved with Gaussian elimination). Diodes and LEDs are solved with Newton iterations; capacitors and inductors with small time steps, so charging curves play out in real time.
 - **Meters work like real instruments:** wire the ammeter in series and the voltmeter across a part.
 - **Lamp:** rated power sets brightness (dim at low power, full at rated power) and the glow follows it. It burns out above 150 % of rated power.
@@ -136,7 +139,7 @@ To add a new part, add one entry to `frontend/src/model/registry.ts` and draw it
 
 ## Simulation model and limits
 
-- DC sources only. Capacitors and inductors are stepped in time (30 steps per second); diodes use the exponential diode law. There is no AC source yet.
+- AC works in the time domain: 64 samples per period of the fastest AC source (fewer above ~400 Hz), so phase and RMS are accurate to about 1 % up to a few hundred hertz. RMS and peaks are measured over the last 3 periods of the slowest AC source. Transformers, three-pin parts (transistors) and wire resistance are not modelled.
 - Voltage and current are shown as magnitudes (no polarity). Diodes have no reverse breakdown and capacitors are not polarised.
 - Battery = ideal source plus a small internal resistance. Ammeter ≈ 1 mΩ, voltmeter ≈ 10 MΩ.
 - Temperature is a simple estimate: 25 °C plus the fraction of rated power times the part's hot temperature (2500 °C lamp, 200 °C resistor).

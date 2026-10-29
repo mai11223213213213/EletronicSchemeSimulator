@@ -1,6 +1,7 @@
 import { elementNames } from './naming'
 import { buildNets, pinKey } from './netlist'
 import { REGISTRY } from './registry'
+import { isSource } from './sources'
 import type { CircuitData } from './types'
 
 export interface Problem {
@@ -35,7 +36,7 @@ export function checkCircuit(data: CircuitData): CheckResult {
   }
 
   if (elements.length === 0) return { errors: [{ message: 'The canvas is empty — place some components.' }], warnings }
-  if (!elements.some((e) => e.type === 'battery')) {
+  if (!elements.some(isSource)) {
     return { errors: [{ message: 'There is no power source — add one from the components list.' }], warnings }
   }
 
@@ -71,7 +72,7 @@ export function checkCircuit(data: CircuitData): CheckResult {
     adj[b].push([a, i])
   })
 
-  // 3. connected components: flood-fill from every node, remember which ones contain a battery
+  // 3. connected components: flood-fill from every node, remember which ones contain a power source
   const comp = new Array<number>(nodeId.size).fill(-1)
   let comps = 0
   for (let s = 0; s < nodeId.size; s++) {
@@ -86,7 +87,7 @@ export function checkCircuit(data: CircuitData): CheckResult {
     comps++
   }
   const hasSource = new Array<boolean>(comps).fill(false)
-  for (const e of edges) if (e.el.type === 'battery') hasSource[comp[id(e.a)]] = true
+  for (const e of edges) if (isSource(e.el)) hasSource[comp[id(e.a)]] = true
   for (const e of edges) {
     if (!hasSource[comp[id(e.a)]]) flag(e.el.id, 'is not connected to a power source.')
   }

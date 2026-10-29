@@ -5,6 +5,7 @@ import { AMBIENT, RESISTOR_HOT } from '../model/solver'
 import type { CircuitElement } from '../model/types'
 import { formatSI } from '../model/units'
 import { useSimStore } from '../store/simStore'
+import { AcSourceElement } from './Elements/AcSourceElement'
 import { BatteryElement } from './Elements/BatteryElement'
 import { CapacitorElement } from './Elements/CapacitorElement'
 import { DiodeElement } from './Elements/DiodeElement'
@@ -15,6 +16,7 @@ import { LampElement } from './Elements/LampElement'
 import { MeterElement } from './Elements/MeterElement'
 import { MotorElement } from './Elements/MotorElement'
 import { ResistorElement } from './Elements/ResistorElement'
+import { ScopeElement } from './Elements/ScopeElement'
 import { SwitchElement } from './Elements/SwitchElement'
 
 interface Props {
@@ -33,6 +35,7 @@ export function ElementView({ element: el, selected, onPointerDown, onPointerMov
   const sim = useSimStore((s) => s.result?.elements[el.id])
   const problem = useSimStore((s) => s.problems.some((p) => p.elementId === el.id))
   const burned = sim?.status === 'burned'
+  const trace = useSimStore((s) => s.result?.traces?.[el.id]) // oscilloscope only: the recent waveform
 
   // A meter's label is its reading while the simulation runs.
   let text = def.format(el.props)
@@ -86,6 +89,8 @@ export function ElementView({ element: el, selected, onPointerDown, onPointerMov
         {el.type === 'inductor' && <InductorElement level={sim?.level} />}
         {el.type === 'fuse' && <FuseElement level={sim?.level} burned={burned} />}
         {el.type === 'motor' && <MotorElement level={sim?.level} burned={burned} />}
+        {el.type === 'acsource' && <AcSourceElement rotation={el.rotation} />}
+        {el.type === 'scope' && <ScopeElement trace={trace} />}
       </g>
       {text && (
         <text

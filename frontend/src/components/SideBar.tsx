@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { COMPONENT_TYPES, REGISTRY } from '../model/registry'
 import type { ComponentType } from '../model/types'
+import { AcSourceElement } from './Elements/AcSourceElement'
 import { BatteryElement } from './Elements/BatteryElement'
 import { CapacitorElement } from './Elements/CapacitorElement'
 import { DiodeElement } from './Elements/DiodeElement'
@@ -12,6 +13,7 @@ import { LampElement } from './Elements/LampElement'
 import { MeterElement } from './Elements/MeterElement'
 import { MotorElement } from './Elements/MotorElement'
 import { ResistorElement } from './Elements/ResistorElement'
+import { ScopeElement } from './Elements/ScopeElement'
 import { SwitchElement } from './Elements/SwitchElement'
 
 // The palette shows the same symbols that get drawn on the canvas (names/pins/defaults are in model/registry.ts).
@@ -28,6 +30,8 @@ const SYMBOLS: Record<ComponentType, ReactNode> = {
   inductor: <InductorElement />,
   fuse: <FuseElement />,
   motor: <MotorElement />,
+  acsource: <AcSourceElement rotation={0} />,
+  scope: <ScopeElement />,
 }
 
 export function Sidebar({ onClose }: { onClose: () => void }) {

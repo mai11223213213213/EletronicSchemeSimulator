@@ -34,6 +34,7 @@ export const CAPACITOR_MODES = ['Capacitance', 'Construction']
  */
 export const CAPACITOR_DEFAULTS = {
   mode: 0, capacitance: 1000, plateArea: 1130, plateDistance: 2, dielectric: 5, maxVoltage: 16,
+  esr: 0.1, // equivalent series resistance, Ω: only used by the "real" model
 }
 
 type CapacitorKey = keyof typeof CAPACITOR_DEFAULTS
@@ -57,6 +58,9 @@ function capacitanceFromConstruction(p: ElementProps): number {
   const gap = num(p, 'plateDistance') * 1e-6
   return (EPSILON_0 * dielectricOf(p).epsilonR * area) / gap
 }
+
+/** Series resistance of the leads and plates, Ω. Only the "real" model uses it. */
+export const capacitorEsr = (p: ElementProps) => Math.max(0, num(p, 'esr'))
 
 /** The capacitance the simulation uses, in farads: the typed value, or the one the construction gives. */
 export function capacitance(p: ElementProps): number {
