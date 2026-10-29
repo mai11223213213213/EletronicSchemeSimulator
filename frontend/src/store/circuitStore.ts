@@ -45,6 +45,8 @@ interface CircuitState extends CircuitData {
   moveBend: (wireId: string, index: number, p: Point) => void
   insertBend: (wireId: string, index: number, p: Point) => void
   removeBend: (wireId: string, index: number) => void
+  /** Drop stored bends that the drawn wire does not pass through (and whose removal changes nothing visible). */
+  pruneDeadBends: () => void
 
   undo: () => void
   redo: () => void
@@ -255,6 +257,32 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
           w.id === wireId ? { ...w, bends: w.bends.filter((_, i) => i !== index) } : w),
       }))
     },
+
+    /**
+     * A stored bend can become "dead": the router skips it when it only makes the wire run out along a line and
+     * come back (see `simplify` in routing.ts). It is then drawn nowhere, yet stays in the data, and its handle
+     * would float in empty space. Called when a drag ends (no undo step of its own: it belongs to that drag).
+     * A bend is only removed if the wire looks exactly the same without it.
+     */
+    pruneDeadBends: () =>
+      set((s) => {
+        let changed = false
+        const wires = s.wires.map((w) => {
+          const path = w.bends.length ? wirePath(w, s) : null
+          if (!path) return w
+          let bends = w.bends
+          for (let i = bends.length - 1; i >= 0; i--) {
+            if ((nearestOnPath(path, bends[i])?.dist ?? Infinity) < 0.01) continue // it is on the wire: keep
+            const without = bends.filter((_, k) => k !== i)
+            const next = wirePath({ ...w, bends: without }, s)
+            if (next && next.length === path.length && next.every((p, k) => same(p, path[k]))) bends = without
+          }
+          if (bends === w.bends) return w
+          changed = true
+          return { ...w, bends }
+        })
+        return changed ? { wires } : {}
+      }),
 
     undo: () =>
       set((s) => {

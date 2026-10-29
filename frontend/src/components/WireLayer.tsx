@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { wirePath } from '../model/wires'
-import { toPathData } from '../model/routing'
+import { nearestOnPath, toPathData } from '../model/routing'
 import type { CircuitData, Point, Selection } from '../model/types'
 
 const WIRE = '#2563eb'
@@ -16,12 +16,14 @@ interface Props {
   onBendPointerMove: (e: ReactPointerEvent<SVGCircleElement>, wireId: string, index: number) => void
   onBendPointerUp: (e: ReactPointerEvent<SVGCircleElement>) => void
   onBendRemove: (wireId: string, index: number) => void
+  /** The handle being dragged right now: always drawn, even if the wire does not pass through it at this moment. */
+  activeBend: { wireId: string; index: number } | null
 }
 
 /** All finished wires (orthogonal or diagonal paths), their junction dots, and the bend handles of the selected wire. */
 export function WireLayer({
   data, selection, onWireClick, onWireDoubleClick, onJunctionClick,
-  onBendPointerDown, onBendPointerMove, onBendPointerUp, onBendRemove,
+  onBendPointerDown, onBendPointerMove, onBendPointerUp, onBendRemove, activeBend,
 }: Props) {
   // Like a drawn schematic: a dot only where 3+ wires meet (2 wires is just a bend).
   const degree = new Map<string, number>()
@@ -47,17 +49,23 @@ export function WireLayer({
               onDoubleClick={(e) => onWireDoubleClick(e, w.id)}
             />
             {/* the "nodes": one handle per stored bend; drag to move, double-click to delete */}
-            {selected && w.bends.map((b, i) => (
-              <circle
-                key={i} cx={b.x} cy={b.y} r="5" fill="#ffffff" stroke={WIRE} strokeWidth="2" className="cursor-move"
-                onPointerDown={(e) => onBendPointerDown(e, w.id, i)}
-                onPointerMove={(e) => onBendPointerMove(e, w.id, i)}
-                onPointerUp={onBendPointerUp}
-                onPointerCancel={onBendPointerUp}
-                onClick={(e) => e.stopPropagation()} // otherwise the click that ends a drag would deselect the wire
+            {selected && w.bends.map((b, i) => {
+              // A bend the router skipped (the wire runs out along a line and back) is not on the drawn wire:
+              // no handle for it, or it would float in empty space.
+              const dragging = activeBend?.wireId === w.id && activeBend.index === i
+                if (!dragging && (nearestOnPath(pts, b)?.dist ?? Infinity) > 0.5) return null
+                return (
+                <circle
+                  key={i} cx={b.x} cy={b.y} r="5" fill="#ffffff" stroke={WIRE} strokeWidth="2" className="cursor-move"
+                  onPointerDown={(e) => onBendPointerDown(e, w.id, i)}
+                  onPointerMove={(e) => onBendPointerMove(e, w.id, i)}
+                  onPointerUp={onBendPointerUp}
+                  onPointerCancel={onBendPointerUp}
+                  onClick={(e) => e.stopPropagation()} // otherwise the click that ends a drag would deselect the wire
                 onDoubleClick={(e) => { e.stopPropagation(); onBendRemove(w.id, i) }}
               />
-            ))}
+              )
+            })}
           </g>
         )
       })}

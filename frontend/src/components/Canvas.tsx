@@ -36,6 +36,7 @@ export function Canvas() {
   const moveBend = useCircuitStore((s) => s.moveBend)
   const insertBend = useCircuitStore((s) => s.insertBend)
   const removeBend = useCircuitStore((s) => s.removeBend)
+  const pruneDeadBends = useCircuitStore((s) => s.pruneDeadBends)
   const diagonalWires = useCircuitStore((s) => s.diagonalWires)
 
   const [cellPx, setCellPx] = useState(GRID)
@@ -83,6 +84,7 @@ export function Canvas() {
   }
   const onElementPointerUp = (e: ReactPointerEvent<SVGGElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    if (drag.current?.moved) pruneDeadBends() // wires of the moved part may have collapsed bends
     drag.current = null
   }
 
@@ -111,10 +113,13 @@ export function Canvas() {
   // ---- editing the bends ("nodes") of the selected wire -------------------------
   // Same recipe as dragging a part: pointer capture on the handle, snap to the grid, one undo step per drag.
   const bendDrag = useRef<{ moved: boolean } | null>(null)
-  const onBendPointerDown = (e: ReactPointerEvent<SVGCircleElement>) => {
+  // the handle being dragged stays visible even if, for a moment, the wire does not pass through it
+  const [activeBend, setActiveBend] = useState<{ wireId: string; index: number } | null>(null)
+  const onBendPointerDown = (e: ReactPointerEvent<SVGCircleElement>, wireId: string, index: number) => {
     e.stopPropagation() // so the canvas does not start panning
     e.currentTarget.setPointerCapture(e.pointerId)
     bendDrag.current = { moved: false }
+    setActiveBend({ wireId, index })
   }
   const onBendPointerMove = (e: ReactPointerEvent<SVGCircleElement>, wireId: string, index: number) => {
     const d = bendDrag.current
@@ -127,7 +132,9 @@ export function Canvas() {
   }
   const onBendPointerUp = (e: ReactPointerEvent<SVGCircleElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    if (bendDrag.current?.moved) pruneDeadBends()
     bendDrag.current = null
+    setActiveBend(null)
   }
   /**
    * Double-click on a diagonal wire adds a bend where you clicked. A diagonal wire's drawn path is exactly
@@ -232,6 +239,7 @@ export function Canvas() {
             onBendPointerMove={onBendPointerMove}
             onBendPointerUp={onBendPointerUp}
             onBendRemove={removeBend}
+            activeBend={activeBend}
           />
           {elements.map((el) => (
             <ElementView
