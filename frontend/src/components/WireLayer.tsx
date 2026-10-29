@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { wirePath } from '../model/wires'
 import { toPathData } from '../model/routing'
 import type { CircuitData, Point, Selection } from '../model/types'
@@ -7,8 +8,8 @@ const WIRE = '#2563eb'
 interface Props {
   data: CircuitData
   selection: Selection | null
-  onWireClick: (e: React.MouseEvent, wireId: string) => void
-  onJunctionClick: (e: React.MouseEvent, junctionId: string) => void
+  onWireClick: (e: ReactMouseEvent, wireId: string) => void
+  onJunctionClick: (e: ReactMouseEvent, junctionId: string) => void
 }
 
 /** All finished wires (orthogonal paths) and their junction dots. */

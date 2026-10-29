@@ -1,3 +1,4 @@
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { rotatePoint } from '../model/geometry'
 import { REGISTRY } from '../model/registry'
 import { AMBIENT, RESISTOR_HOT } from '../model/solver'
@@ -13,12 +14,14 @@ import { SwitchElement } from './Elements/SwitchElement'
 interface Props {
   element: CircuitElement
   selected: boolean
-  onMouseDown: (e: React.MouseEvent, el: CircuitElement) => void
+  onPointerDown: (e: ReactPointerEvent<SVGGElement>, el: CircuitElement) => void
+  onPointerMove: (e: ReactPointerEvent<SVGGElement>, el: CircuitElement) => void
+  onPointerUp: (e: ReactPointerEvent<SVGGElement>) => void
   onToggle: (el: CircuitElement) => void
 }
 
 /** One placed component. Rotation is around its centre because the symbol is drawn around (0,0). */
-export function ElementView({ element: el, selected, onMouseDown, onToggle }: Props) {
+export function ElementView({ element: el, selected, onPointerDown, onPointerMove, onPointerUp, onToggle }: Props) {
   const def = REGISTRY[el.type]
   // Live numbers from the simulation (undefined while it is not running) and "this part breaks the circuit" marker.
   const sim = useSimStore((s) => s.result?.elements[el.id])
@@ -41,7 +44,10 @@ export function ElementView({ element: el, selected, onMouseDown, onToggle }: Pr
       <g
         transform={`rotate(${el.rotation})`}
         className="cursor-move"
-        onMouseDown={(e) => onMouseDown(e, el)}
+        onPointerDown={(e) => onPointerDown(e, el)}
+        onPointerMove={(e) => onPointerMove(e, el)}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={() => onToggle(el)}
       >

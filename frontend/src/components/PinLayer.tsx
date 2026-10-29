@@ -1,10 +1,11 @@
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { elementPins } from '../model/geometry'
 import type { CircuitData } from '../model/types'
 
 interface Props {
   data: CircuitData
   drawing: boolean
-  onPinClick: (e: React.MouseEvent, elementId: string, pinId: string) => void
+  onPinClick: (e: ReactMouseEvent, elementId: string, pinId: string) => void
 }
 
 /** Clickable connection points. Rings show where a wire can start or end. */

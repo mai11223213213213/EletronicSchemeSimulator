@@ -1,5 +1,6 @@
 import { HelpCircle } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { endpointPos, snapPoint } from '../model/geometry'
 import { GRID, isComponentType } from '../model/registry'
@@ -18,7 +19,17 @@ export function Canvas() {
   const junctions = useCircuitStore((s) => s.junctions)
   const selection = useCircuitStore((s) => s.selection)
   const draft = useCircuitStore((s) => s.draft)
-  const st = useCircuitStore.getState // actions are stable; always read fresh state through this
+  // Store actions are stable references, so selecting them never causes a re-render.
+  const addElement = useCircuitStore((s) => s.addElement)
+  const beginMove = useCircuitStore((s) => s.beginMove)
+  const moveElement = useCircuitStore((s) => s.moveElement)
+  const select = useCircuitStore((s) => s.select)
+  const startWire = useCircuitStore((s) => s.startWire)
+  const addBend = useCircuitStore((s) => s.addBend)
+  const finishWire = useCircuitStore((s) => s.finishWire)
+  const finishWireOnWire = useCircuitStore((s) => s.finishWireOnWire)
+  const cancelWire = useCircuitStore((s) => s.cancelWire)
+  const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
 
   const [cellPx, setCellPx] = useState(GRID)
   const [gridVisible, setGridVisible] = useState(true)
@@ -39,64 +50,60 @@ export function Canvas() {
   }, [])
 
   // ---- dragging parts -------------------------------------------------------
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const d = drag.current
-      if (!d) return
-      const w = toWorld(e.clientX, e.clientY)
-      const p = snapPoint({ x: w.x - d.dx, y: w.y - d.dy })
-      const el = st().elements.find((x) => x.id === d.id)
-      if (!el || (el.x === p.x && el.y === p.y)) return
-      if (!d.moved) { st().beginMove(); d.moved = true } // one undo step per drag
-      st().moveElement(d.id, p.x, p.y)
-    }
-    const onUp = () => { drag.current = null }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [st, toWorld])
-
-  const onElementMouseDown = (e: React.MouseEvent, el: CircuitElement) => {
+  // Pointer events + pointer capture: after pointerdown the part keeps receiving pointermove/up
+  // even when the cursor leaves it (or the window), so no global listeners are needed.
+  const onElementPointerDown = (e: ReactPointerEvent<SVGGElement>, el: CircuitElement) => {
     e.stopPropagation()
-    if (st().draft) return
-    st().select({ kind: 'element', id: el.id })
+    if (draft) return
+    select({ kind: 'element', id: el.id })
+    e.currentTarget.setPointerCapture(e.pointerId)
     const w = toWorld(e.clientX, e.clientY)
     drag.current = { id: el.id, dx: w.x - el.x, dy: w.y - el.y, moved: false }
   }
+  const onElementPointerMove = (e: ReactPointerEvent<SVGGElement>, el: CircuitElement) => {
+    const d = drag.current
+    if (!d || d.id !== el.id) return
+    const w = toWorld(e.clientX, e.clientY)
+    const p = snapPoint({ x: w.x - d.dx, y: w.y - d.dy })
+    if (el.x === p.x && el.y === p.y) return
+    if (!d.moved) { beginMove(); d.moved = true } // one undo step per drag
+    moveElement(d.id, p.x, p.y)
+  }
+  const onElementPointerUp = (e: ReactPointerEvent<SVGGElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    drag.current = null
+  }
 
   // ---- drop from the sidebar -----------------------------------------------
-  const onDrop = (e: React.DragEvent) => {
+  const onDrop = (e: ReactDragEvent) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('text/plain')
     if (!isComponentType(type)) return
     const p = snapPoint(toWorld(e.clientX, e.clientY))
-    st().addElement(type, p.x, p.y)
+    addElement(type, p.x, p.y)
   }
 
   // ---- wiring ---------------------------------------------------------------
-  const onPinClick = (e: React.MouseEvent, elementId: string, pinId: string) => {
+  const onPinClick = (e: ReactMouseEvent, elementId: string, pinId: string) => {
     e.stopPropagation()
     const ep = { kind: 'pin', elementId, pinId } as const
-    if (st().draft) st().finishWire(ep)
-    else st().startWire(ep)
+    if (draft) finishWire(ep)
+    else startWire(ep)
   }
-  const onJunctionClick = (e: React.MouseEvent, junctionId: string) => {
+  const onJunctionClick = (e: ReactMouseEvent, junctionId: string) => {
     e.stopPropagation()
     const ep = { kind: 'junction', junctionId } as const
-    if (st().draft) st().finishWire(ep)
-    else st().startWire(ep)
+    if (draft) finishWire(ep)
+    else startWire(ep)
   }
-  const onWireClick = (e: React.MouseEvent, wireId: string) => {
+  const onWireClick = (e: ReactMouseEvent, wireId: string) => {
     e.stopPropagation()
-    if (st().draft) st().finishWireOnWire(wireId, toWorld(e.clientX, e.clientY))
-    else st().select({ kind: 'wire', id: wireId })
+    if (draft) finishWireOnWire(wireId, toWorld(e.clientX, e.clientY))
+    else select({ kind: 'wire', id: wireId })
   }
-  const onBackgroundClick = (e: React.MouseEvent) => {
-    if (st().draft) st().addBend(snapPoint(toWorld(e.clientX, e.clientY)))
-    else st().select(null)
+  const onBackgroundClick = (e: ReactMouseEvent) => {
+    if (draft) addBend(snapPoint(toWorld(e.clientX, e.clientY)))
+    else select(null)
   }
 
   // live preview of the wire being drawn
@@ -113,10 +120,10 @@ export function Canvas() {
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
     >
       <svg
-        className={`absolute inset-0 h-full w-full ${draft ? 'cursor-crosshair' : ''}`}
+        className={`absolute inset-0 h-full w-full touch-none ${draft ? 'cursor-crosshair' : ''}`}
         onClick={onBackgroundClick}
-        onMouseMove={(e) => draft && setCursor(snapPoint(toWorld(e.clientX, e.clientY)))}
-        onContextMenu={(e) => { if (draft) { e.preventDefault(); st().cancelWire() } }}
+        onPointerMove={(e) => draft && setCursor(snapPoint(toWorld(e.clientX, e.clientY)))}
+        onContextMenu={(e) => { if (draft) { e.preventDefault(); cancelWire() } }}
       >
         <defs>
           {/* shifted by half a cell so the dot sits in the tile centre (no clipping) yet lands on grid points */}
@@ -139,8 +146,10 @@ export function Canvas() {
               key={el.id}
               element={el}
               selected={selection?.kind === 'element' && selection.id === el.id}
-              onMouseDown={onElementMouseDown}
-              onToggle={(x) => st().toggleSwitch(x.id)}
+              onPointerDown={onElementPointerDown}
+              onPointerMove={onElementPointerMove}
+              onPointerUp={onElementPointerUp}
+              onToggle={(x) => toggleSwitch(x.id)}
             />
           ))}
           <PinLayer data={{ elements, wires, junctions }} drawing={!!draft} onPinClick={onPinClick} />

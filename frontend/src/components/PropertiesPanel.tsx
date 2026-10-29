@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { REGISTRY } from '../model/registry'
 import { useCircuitStore } from '../store/circuitStore'
 import { useConsoleVisible } from '../store/simStore'
@@ -35,20 +36,7 @@ export function PropertiesPanel() {
           <label key={f.key} className="mb-1 flex items-center justify-between gap-2 text-sm text-gray-700">
             <span>{f.label}</span>
             <span className="flex items-center gap-1">
-              {/* uncontrolled + keyed by value: applies on blur/Enter (one undo step), resets after undo */}
-              <input
-                key={`${element.id}:${f.key}:${value}`}
-                type="number"
-                min={f.min}
-                step="any"
-                defaultValue={value}
-                onBlur={(e) => {
-                  commit(e.currentTarget.value, f.min, value, (v) => setProp(element.id, f.key, v))
-                  e.currentTarget.value = String(value) // invalid input snaps back (a valid one remounts via the key)
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-right text-sm"
-              />
+              <NumberField value={value} min={f.min} onCommit={(v) => setProp(element.id, f.key, v)} />
               <span className="w-7 text-xs text-gray-500">{f.unit}</span>
             </span>
           </label>
@@ -59,9 +47,28 @@ export function PropertiesPanel() {
   )
 }
 
-/** Accept only finite numbers >= min; otherwise ignore the edit (the field snaps back). */
-function commit(raw: string, min: number, current: number, apply: (v: number) => void) {
-  const v = Number(raw)
-  if (raw.trim() === '' || !Number.isFinite(v) || v < min || v === current) return
-  apply(v)
+/**
+ * Number input that edits a local text draft while focused and only talks to the store on blur/Enter
+ * (so typing "12" does not create undo steps for "1" and "12"). Not focused = it just shows the store
+ * value, so undo/redo and an invalid entry snap back by themselves — no remounting, no DOM mutation.
+ */
+function NumberField({ value, min, onCommit }: { value: number; min: number; onCommit: (v: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null) // null = not editing
+  const finish = () => {
+    const v = Number(draft)
+    // accept only finite numbers >= min that actually change something; anything else is dropped
+    if (draft !== null && draft.trim() !== '' && Number.isFinite(v) && v >= min && v !== value) onCommit(v)
+    setDraft(null)
+  }
+  return (
+    <input
+      type="number" min={min} step="any"
+      value={draft ?? String(value)}
+      onFocus={() => setDraft(String(value))}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={finish}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+      className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-right text-sm"
+    />
+  )
 }

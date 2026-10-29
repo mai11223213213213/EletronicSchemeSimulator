@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { COMPONENT_TYPES, REGISTRY } from '../model/registry'
 import type { ComponentType } from '../model/types'
@@ -8,7 +9,7 @@ import { ResistorElement } from './Elements/ResistorElement'
 import { SwitchElement } from './Elements/SwitchElement'
 
 // The palette shows the same symbols that get drawn on the canvas (names/pins/defaults are in model/registry.ts).
-const SYMBOLS: Record<ComponentType, React.ReactNode> = {
+const SYMBOLS: Record<ComponentType, ReactNode> = {
   battery: <BatteryElement rotation={0} />,
   resistor: <ResistorElement />,
   lamp: <LampElement />,
