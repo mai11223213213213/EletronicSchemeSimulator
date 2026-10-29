@@ -1,6 +1,8 @@
 // Pure data model. No React, no DOM — safe to move to a shared package later.
 
-export type ComponentType = 'battery' | 'resistor' | 'lamp' | 'switch' | 'ammeter' | 'voltmeter'
+export type ComponentType =
+  | 'battery' | 'resistor' | 'lamp' | 'switch' | 'ammeter' | 'voltmeter'
+  | 'diode' | 'led' | 'capacitor' | 'inductor' | 'fuse' | 'motor'
 
 /** Direction a pin "faces" (the way a wire should leave it). */
 export type Dir = 'N' | 'E' | 'S' | 'W'

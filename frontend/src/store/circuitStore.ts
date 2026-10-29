@@ -18,6 +18,8 @@ interface CircuitState extends CircuitData {
   future: CircuitData[]
   /** Style given to NEW wires (remembered between wires). Not part of the circuit, so not in undo. */
   diagonalWires: boolean
+  /** Why the app changed a value the user typed (e.g. "rated voltage lowered"). Shown in the properties card. */
+  notice: { elementId: string; notes: string[] } | null
 
   addElement: (type: ComponentType, x: number, y: number) => void
   /** Call once when a drag starts, so the whole drag is a single undo step. */
@@ -76,6 +78,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     past: [],
     future: [],
     diagonalWires: false,
+    notice: null,
 
     addElement: (type, x, y) => {
       commit()
@@ -117,10 +120,18 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
 
     setProp: (id, key, value) => {
       const el = get().elements.find((x) => x.id === id)
-      if (!el || !(key in el.props) || el.props[key] === value) return
-      commit()
+      const def = el && REGISTRY[el.type]
+      // Accept any key the part type defines (parts made before a newer prop existed do not have it yet).
+      if (!el || !def || !(key in def.defaults) || el.props[key] === value) return
+      // Let the part type correct impossible combinations (see `normalize` in the registry), then compare:
+      // if the correction undid the edit completely there is nothing to save in the undo history.
+      const edited = { ...el.props, [key]: value }
+      const { props, notes } = def.normalize?.(edited, key) ?? { props: edited, notes: [] }
+      const changed = Object.keys(props).some((k) => props[k] !== el.props[k])
+      if (changed) commit()
       set((s) => ({
-        elements: s.elements.map((x) => (x.id === id ? { ...x, props: { ...x.props, [key]: value } } : x)),
+        elements: changed ? s.elements.map((x) => (x.id === id ? { ...x, props } : x)) : s.elements,
+        notice: notes.length ? { elementId: id, notes } : null,
       }))
     },
 
@@ -144,7 +155,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       })
     },
 
-    select: (selection) => set({ selection }),
+    select: (selection) => set({ selection, notice: null }),
 
     startWire: (from) => set({ draft: { from, bends: [] }, selection: null }),
 
@@ -249,14 +260,14 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       set((s) => {
         const prev = s.past.at(-1)
         if (!prev) return {}
-        return { ...prev, past: s.past.slice(0, -1), future: [pick(s), ...s.future], selection: null, draft: null }
+        return { ...prev, past: s.past.slice(0, -1), future: [pick(s), ...s.future], selection: null, draft: null, notice: null }
       }),
 
     redo: () =>
       set((s) => {
         const next = s.future[0]
         if (!next) return {}
-        return { ...next, past: [...s.past, pick(s)], future: s.future.slice(1), selection: null, draft: null }
+        return { ...next, past: [...s.past, pick(s)], future: s.future.slice(1), selection: null, draft: null, notice: null }
       }),
 
     loadCircuit: (data) =>

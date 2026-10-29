@@ -6,8 +6,14 @@ import type { CircuitElement } from '../model/types'
 import { formatSI } from '../model/units'
 import { useSimStore } from '../store/simStore'
 import { BatteryElement } from './Elements/BatteryElement'
+import { CapacitorElement } from './Elements/CapacitorElement'
+import { DiodeElement } from './Elements/DiodeElement'
+import { FuseElement } from './Elements/FuseElement'
+import { InductorElement } from './Elements/InductorElement'
+import { LedElement } from './Elements/LedElement'
 import { LampElement } from './Elements/LampElement'
 import { MeterElement } from './Elements/MeterElement'
+import { MotorElement } from './Elements/MotorElement'
 import { ResistorElement } from './Elements/ResistorElement'
 import { SwitchElement } from './Elements/SwitchElement'
 
@@ -70,10 +76,16 @@ export function ElementView({ element: el, selected, onPointerDown, onPointerMov
           <ResistorElement heat={sim ? (sim.T - AMBIENT) / (RESISTOR_HOT - AMBIENT) : 0} burned={burned} />
         )}
         {el.type === 'battery' && <BatteryElement rotation={el.rotation} />}
-        {el.type === 'lamp' && <LampElement brightness={sim?.brightness} burned={burned} />}
+        {el.type === 'lamp' && <LampElement brightness={sim?.level} burned={burned} />}
         {el.type === 'switch' && <SwitchElement closed={el.props.closed === true} />}
         {el.type === 'ammeter' && <MeterElement letter="A" rotation={el.rotation} />}
         {el.type === 'voltmeter' && <MeterElement letter="V" rotation={el.rotation} />}
+        {el.type === 'diode' && <DiodeElement level={sim?.level} burned={burned} />}
+        {el.type === 'led' && <LedElement hue={Number(el.props.hue)} level={sim?.level} burned={burned} />}
+        {el.type === 'capacitor' && <CapacitorElement level={sim?.level} burned={burned} />}
+        {el.type === 'inductor' && <InductorElement level={sim?.level} />}
+        {el.type === 'fuse' && <FuseElement level={sim?.level} burned={burned} />}
+        {el.type === 'motor' && <MotorElement level={sim?.level} burned={burned} />}
       </g>
       {text && (
         <text

@@ -5,3 +5,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+
+/* Used by the motor symbol: one full turn. The duration is set per motor, from its speed. */
+@keyframes motor-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

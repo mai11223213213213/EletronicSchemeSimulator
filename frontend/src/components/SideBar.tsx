@@ -3,8 +3,14 @@ import { X } from 'lucide-react'
 import { COMPONENT_TYPES, REGISTRY } from '../model/registry'
 import type { ComponentType } from '../model/types'
 import { BatteryElement } from './Elements/BatteryElement'
+import { CapacitorElement } from './Elements/CapacitorElement'
+import { DiodeElement } from './Elements/DiodeElement'
+import { FuseElement } from './Elements/FuseElement'
+import { InductorElement } from './Elements/InductorElement'
+import { LedElement } from './Elements/LedElement'
 import { LampElement } from './Elements/LampElement'
 import { MeterElement } from './Elements/MeterElement'
+import { MotorElement } from './Elements/MotorElement'
 import { ResistorElement } from './Elements/ResistorElement'
 import { SwitchElement } from './Elements/SwitchElement'
 
@@ -16,6 +22,12 @@ const SYMBOLS: Record<ComponentType, ReactNode> = {
   switch: <SwitchElement closed />,
   ammeter: <MeterElement letter="A" rotation={0} />,
   voltmeter: <MeterElement letter="V" rotation={0} />,
+  diode: <DiodeElement />,
+  led: <LedElement />,
+  capacitor: <CapacitorElement />,
+  inductor: <InductorElement />,
+  fuse: <FuseElement />,
+  motor: <MotorElement />,
 }
 
 export function Sidebar({ onClose }: { onClose: () => void }) {

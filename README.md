@@ -8,17 +8,23 @@ Drag parts onto the canvas, connect them with wires, press **Start simulation**,
 
 **Editor**
 - Drag parts from the components list onto a grid canvas.
-- Parts: power source, resistor, incandescent lamp, switch, ammeter, voltmeter.
+- Parts: power source, resistor, incandescent lamp, switch, ammeter, voltmeter, diode, LED, capacitor, inductor, fuse, motor (fan).
 - Wires are straight (horizontal/vertical, routed automatically) or diagonal (free angle). Click the canvas to add bends, drag the bends of a selected wire to reshape it, or click an existing wire to make a T-junction.
 - Rotate parts in 45° steps, move them with the mouse, edit their values in the properties panel.
 - Undo / redo, grid on/off and zoom.
 
 **Simulation**
 - **Circuit check before start:** there must be a power source, every pin must be wired, and every part must lie on a closed loop. Problems are listed and the offending parts are outlined in red.
-- **DC solver:** nodal analysis (Kirchhoff's current law, solved with Gaussian elimination).
+- **DC solver:** nodal analysis (Kirchhoff's current law, solved with Gaussian elimination). Diodes and LEDs are solved with Newton iterations; capacitors and inductors with small time steps, so charging curves play out in real time.
 - **Meters work like real instruments:** wire the ammeter in series and the voltmeter across a part.
 - **Lamp:** rated power sets brightness (dim at low power, full at rated power) and the glow follows it. It burns out above 150 % of rated power.
 - **Resistor:** rated power sets its temperature and colour, and it burns out above 150 % of rated power.
+- **LED:** glows in its own colour (set the hue), needs a series resistor and burns out above 150 % of its rated current.
+- **Diode:** conducts one way only; the triangle tints blue while it conducts.
+- **Capacitor:** describe it either by its **capacitance** (type µF) or by its **construction**: plate area, plate gap and what fills the gap (air, paper, polyester, glass, mica, ceramic, tantalum oxide), from which C = ε₀·εr·A / d is calculated. Switching between the two keeps the capacitance (and says what it recalculated). In construction mode the rated voltage cannot exceed the breakdown voltage (dielectric strength × gap), so it is lowered automatically; area, gap and dielectric are never changed for you. It starts empty at every Start, the plates fill with blue as it charges, and it bursts above its rated voltage.
+- **Inductor:** current rises gradually; a halo shows the magnetic field.
+- **Fuse:** blows (the wire inside melts) above its rated current.
+- **Motor (fan):** the blades spin faster the more power it gets, and it burns out when overdriven.
 - **Live:** change a value or rewire while the simulation runs and the numbers update.
 - **Readout card:** R, I, U, P and temperature (t) for every part with a status (OK / OPEN / BURNED). Click a card to select that part on the canvas.
 
@@ -130,8 +136,8 @@ To add a new part, add one entry to `frontend/src/model/registry.ts` and draw it
 
 ## Simulation model and limits
 
-- DC only; resistors, lamps and switches are linear.
-- Voltage and current are shown as magnitudes (no polarity).
+- DC sources only. Capacitors and inductors are stepped in time (30 steps per second); diodes use the exponential diode law. There is no AC source yet.
+- Voltage and current are shown as magnitudes (no polarity). Diodes have no reverse breakdown and capacitors are not polarised.
 - Battery = ideal source plus a small internal resistance. Ammeter ≈ 1 mΩ, voltmeter ≈ 10 MΩ.
 - Temperature is a simple estimate: 25 °C plus the fraction of rated power times the part's hot temperature (2500 °C lamp, 200 °C resistor).
 - Burned parts stay burned until you stop the simulation.

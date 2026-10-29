@@ -1,25 +1,43 @@
+import { capacitance } from './capacitor'
 import { elementNames } from './naming'
 import { buildNets, pinKey } from './netlist'
 import { REGISTRY } from './registry'
-import type { CircuitData, CircuitElement } from './types'
+import type { CircuitData, CircuitElement, ComponentType } from './types'
 
-// ---- physical constants of the simplified model (DC only) -----------------------------------
+// ---- physical constants of the simplified model ----------------------------------------------
 export const AMBIENT = 25 // °C
-const BURN_FACTOR = 1.5 // a lamp/resistor burns out above 150 % of its rated power
-const LAMP_HOT = 2500 // °C of a filament running at exactly its rated power
 export const RESISTOR_HOT = 200 // °C of a resistor running at exactly its rated power
+/** °C of a part running exactly at its rating. A part without an entry does not get warm in this model. */
+const HOT: Partial<Record<ComponentType, number>> = {
+  lamp: 2500, resistor: RESISTOR_HOT, motor: 90, led: 90, diode: 120, fuse: 160,
+}
+/** A part is destroyed when (load / rating) goes above this number. */
+const BURN_AT: Partial<Record<ComponentType, number>> = {
+  lamp: 1.5, resistor: 1.5, motor: 1.5, led: 1.5, diode: 1.5, fuse: 1, capacitor: 1,
+}
+const BURN_VERB: Partial<Record<ComponentType, string>> = { fuse: 'blew', capacitor: 'burst' } // default: "burned out"
+
 const MIN_R = 1e-3 // Ω, stops 1/0 for "0 Ω" parts
 const SWITCH_R = 1e-3 // Ω, a closed switch is almost a wire
 const AMMETER_R = 1e-3 // Ω, an ideal ammeter has ~0 Ω
 const VOLTMETER_R = 1e7 // Ω, an ideal voltmeter has ~∞ Ω
-const GMIN = 1e-12 // S, tiny leak to ground on every node so floating nodes never make the matrix singular
+const FUSE_R = 5e-3 // Ω, a healthy fuse is almost a wire
+const GMIN = 1e-12 // S, tiny leak on every node / junction so the matrix never becomes singular
 const SHORT_CIRCUIT_A = 20
+const THERMAL_VOLTAGE = 0.02585 // V, kT/q at room temperature: sets how sharply a diode switches on
+
+/** Length of one simulation step in seconds. Capacitors and inductors advance by this much per step. */
+export const TICK_SECONDS = 1 / 30
+
+const NEWTON_MAX = 200 // iterations for the diodes
+const NEWTON_TOL = 1e-7 // V
+const NEWTON_STEP = 0.1 // V, the most a junction voltage may RISE in one iteration (keeps exp() from blowing up)
 
 export type Status = 'ok' | 'burned' | 'open'
 
 export interface ElementResult {
   status: Status
-  /** Resistance in Ω; null = infinite (open switch, burned part). */
+  /** Resistance in Ω; null = infinite or not a plain resistance (open switch, burned part, diode, capacitor ...). */
   R: number | null
   /** Current through the part (A) and voltage across it (V). Both are magnitudes. */
   I: number
@@ -27,8 +45,11 @@ export interface ElementResult {
   /** Power in W and temperature in °C. */
   P: number
   T: number
-  /** Lamps only: 0 (dark) … 1 (full brightness). */
-  brightness: number
+  /**
+   * How "active" the part is, 0 … 1, used by the drawings:
+   * lamp/LED brightness, motor speed, capacitor charge, fuse/diode load, inductor magnetic field.
+   */
+  level: number
 }
 
 export interface SimResult {
@@ -41,24 +62,70 @@ export interface SimOutput {
   result: SimResult
   /** id -> temperature at the moment it burned. Feed it back into the next call so burned parts stay burned. */
   burned: Record<string, number>
+  /**
+   * What the parts "remember" after this step: capacitor voltage (V), inductor current (A),
+   * and (only as a starting guess for the next solve) a diode's junction voltage. Feed it into the next step.
+   */
+  memory: Record<string, number>
 }
 
 const prop = (el: CircuitElement, key: string) => {
   const v = el.props[key]
   return typeof v === 'number' ? v : Number(REGISTRY[el.type].defaults[key]) // old parts lack newer props
 }
-const ratedPower = (el: CircuitElement) => prop(el, el.type === 'lamp' ? 'ratedPower' : 'maxPower')
+const ratedPower = (el: CircuitElement) => prop(el, el.type === 'resistor' ? 'maxPower' : 'ratedPower')
+const isJunction = (el: CircuitElement) => el.type === 'diode' || el.type === 'led'
 
-/** Resistance a part presents to the circuit, or null if it carries no current at all. */
+export const hasTemperature = (type: ComponentType) => HOT[type] !== undefined
+/** Capacitors and inductors change over time, so the simulation has to keep stepping while one is on the canvas. */
+export const isDynamic = (el: CircuitElement) => el.type === 'capacitor' || el.type === 'inductor'
+
+/** Resistance a plain resistive part presents to the circuit, or null if it carries no current at all. */
 function resistanceOf(el: CircuitElement, isBurned: boolean): number | null {
   switch (el.type) {
     case 'resistor':
-    case 'lamp': return isBurned ? null : Math.max(prop(el, 'resistance'), MIN_R)
+    case 'lamp':
+    case 'motor': return isBurned ? null : Math.max(prop(el, 'resistance'), MIN_R)
+    case 'fuse': return isBurned ? null : FUSE_R
     case 'switch': return el.props.closed === true ? SWITCH_R : null
     case 'ammeter': return AMMETER_R
     case 'voltmeter': return VOLTMETER_R
-    default: return null // battery has its own model
+    default: return null // battery, diode, LED, capacitor, inductor have their own models
   }
+}
+
+/** How loaded a part is relative to its rating: 1 = exactly at the rating. Which quantity counts depends on the part. */
+function loadRatio(el: CircuitElement, P: number, I: number, U: number): number {
+  switch (el.type) {
+    case 'lamp':
+    case 'resistor':
+    case 'motor': return P / ratedPower(el)
+    case 'led':
+    case 'diode':
+    case 'fuse': return I / prop(el, 'ratedCurrent')
+    case 'capacitor': return U / prop(el, 'maxVoltage')
+    default: return 0
+  }
+}
+
+/**
+ * Diode law (Shockley):  i = Is·(e^(v/nVt) − 1).  Returns the current i and the slope g = di/dv at voltage v.
+ * Past 40·nVt the exponential is continued as a straight line, so a wild guess cannot overflow to Infinity.
+ */
+function junction(v: number, Is: number, nVt: number) {
+  const limit = 40 * nVt
+  const e = Math.exp(Math.min(v, limit) / nVt)
+  const g = (Is * e) / nVt
+  const i = Is * (e - 1) + (v > limit ? g * (v - limit) : 0)
+  return { i, g }
+}
+
+/** Diode / LED constants. `Is` is chosen so the part drops exactly Vf at its rated current. */
+function junctionParams(el: CircuitElement) {
+  const led = el.type === 'led'
+  const nVt = (led ? 2 : 1) * THERMAL_VOLTAGE // LEDs have a "softer" knee than silicon diodes
+  const vf = Math.min(led ? prop(el, 'forwardVoltage') : 0.7, 20) // 20 V cap keeps exp() finite
+  return { nVt, Is: prop(el, 'ratedCurrent') / Math.exp(vf / nVt) }
 }
 
 /** Solve A·x = z by Gaussian elimination with partial pivoting. */
@@ -87,14 +154,24 @@ function solveLinear(A: number[][], z: number[]): number[] {
 }
 
 /**
- * Nodal analysis: Kirchhoff's current law at every node gives  G·V = I
+ * One simulation step. Nodal analysis: Kirchhoff's current law at every node gives  G·V = I
  *  - G[i][i] = sum of conductances (1/R) touching node i, G[i][j] = −conductance between i and j
  *  - I[i]    = current pushed into node i by sources
- * A battery is an ideal source V in series with its internal resistance r. Its Norton twin is a
- * current source V/r in parallel with 1/r — so the battery needs no extra unknowns.
+ * Every part is turned into "a conductance plus a current source" (its companion model):
+ *  - resistive parts: just 1/R
+ *  - battery: a current source V/r in parallel with 1/r (Norton form of "V in series with r")
+ *  - capacitor (backward Euler):  i = C·(v − vPrev)/dt   → conductance C/dt plus a source C/dt·vPrev
+ *  - inductor  (backward Euler):  i = iPrev + dt/L·v     → conductance dt/L   plus a source iPrev
+ *  - diode / LED: not a straight line, so it is replaced by its tangent at the current guess; the guess is
+ *    improved over and over (Newton's method) until the voltages stop changing.
  * The node under the first battery's "minus" pin is the 0 V reference (ground).
  */
-export function simulate(data: CircuitData, burnedIn: Record<string, number> = {}): SimOutput {
+export function simulate(
+  data: CircuitData,
+  burnedIn: Record<string, number> = {},
+  memoryIn: Record<string, number> = {},
+  dt: number = TICK_SECONDS,
+): SimOutput {
   const { elements } = data
   const names = elementNames(elements)
   const { net } = buildNets(data)
@@ -118,74 +195,149 @@ export function simulate(data: CircuitData, burnedIn: Record<string, number> = {
     Object.entries(burnedIn).filter(([id]) => ids.has(id)),
   )
 
-  /** One linear solve with the current set of burned parts. */
+  /** One full solve (with Newton iterations if there are diodes) for the current set of burned parts. */
   const solveOnce = () => {
     const n = rows.size
-    const A = Array.from({ length: n }, () => new Array<number>(n).fill(0))
-    const z = new Array<number>(n).fill(0)
-    for (let i = 0; i < n; i++) A[i][i] += GMIN
-    const stamp = (i: number, j: number, g: number) => {
-      if (i >= 0) A[i][i] += g
-      if (j >= 0) A[j][j] += g
-      if (i >= 0 && j >= 0) { A[i][j] -= g; A[j][i] -= g }
-    }
-    for (const el of elements) {
-      const a = rowOf(el, 0)
-      const b = rowOf(el, 1)
-      if (el.type === 'battery') {
-        const r = Math.max(prop(el, 'internalResistance'), MIN_R)
-        stamp(a, b, 1 / r)
-        const i = prop(el, 'voltage') / r
-        if (a >= 0) z[a] += i // pushed into "plus"
-        if (b >= 0) z[b] -= i // pulled out of "minus"
-      } else {
-        const r = resistanceOf(el, el.id in burned)
-        if (r !== null) stamp(a, b, 1 / r)
-      }
-    }
-    const v = solveLinear(A, z)
-    const volt = (row: number) => (row < 0 ? 0 : v[row])
+    const live = elements.filter((el) => isJunction(el) && !(el.id in burned))
+    const vd: Record<string, number> = {} // current guess of each junction's voltage
+    for (const el of live) vd[el.id] = memoryIn[el.id] ?? 0 // warm start from the previous step
+    const lin: Record<string, { g: number; ieq: number }> = {} // tangent line of each junction, from the last iteration
+    let volt: (row: number) => number = () => 0
 
+    for (let iter = 0; iter < NEWTON_MAX; iter++) {
+      const A = Array.from({ length: n }, () => new Array<number>(n).fill(0))
+      const z = new Array<number>(n).fill(0)
+      for (let i = 0; i < n; i++) A[i][i] += GMIN
+      const stamp = (i: number, j: number, g: number) => {
+        if (i >= 0) A[i][i] += g
+        if (j >= 0) A[j][j] += g
+        if (i >= 0 && j >= 0) { A[i][j] -= g; A[j][i] -= g }
+      }
+      /** A current `amount` flowing from a to b THROUGH the part. */
+      const through = (a: number, b: number, amount: number) => {
+        if (a >= 0) z[a] -= amount
+        if (b >= 0) z[b] += amount
+      }
+
+      for (const el of elements) {
+        const a = rowOf(el, 0)
+        const b = rowOf(el, 1)
+        const dead = el.id in burned
+        if (el.type === 'battery') {
+          const r = Math.max(prop(el, 'internalResistance'), MIN_R)
+          stamp(a, b, 1 / r)
+          through(a, b, -prop(el, 'voltage') / r) // pushes V/r into "plus"
+        } else if (el.type === 'capacitor') {
+          if (dead) continue
+          const g = capacitance(el.props) / dt
+          stamp(a, b, g)
+          through(a, b, -g * (memoryIn[el.id] ?? 0)) // the charge it already holds keeps pushing current
+        } else if (el.type === 'inductor') {
+          const g = dt / (prop(el, 'inductance') * 1e-3)
+          stamp(a, b, g)
+          through(a, b, memoryIn[el.id] ?? 0) // the current it already carries wants to continue
+        } else if (isJunction(el)) {
+          if (dead) continue
+          const { Is, nVt } = junctionParams(el)
+          const { i, g } = junction(vd[el.id], Is, nVt)
+          const gg = Math.max(g, GMIN) // a reverse-biased diode still leaks a little
+          const ieq = i - g * vd[el.id] // tangent line: i(v) ≈ g·v + ieq
+          stamp(a, b, gg)
+          through(a, b, ieq)
+          lin[el.id] = { g: gg, ieq }
+        } else {
+          const r = resistanceOf(el, dead)
+          if (r !== null) stamp(a, b, 1 / r)
+        }
+      }
+
+      const v = solveLinear(A, z)
+      volt = (row) => (row < 0 ? 0 : v[row])
+
+      // Did the junction voltages settle? If not, take the next guess (rising by at most NEWTON_STEP).
+      let worst = 0
+      for (const el of live) {
+        const vNew = volt(rowOf(el, 0)) - volt(rowOf(el, 1))
+        const delta = vNew - vd[el.id]
+        worst = Math.max(worst, Math.abs(delta))
+        vd[el.id] = delta > NEWTON_STEP ? vd[el.id] + NEWTON_STEP : vNew
+      }
+      if (!(worst >= NEWTON_TOL)) break // converged (or NaN: stop rather than loop forever)
+    }
+
+    // Turn the node voltages into per-part numbers.
     const out: Record<string, ElementResult> = {}
+    const memory: Record<string, number> = {}
     for (const el of elements) {
       const isBurned = el.id in burned
-      const heats = el.type === 'lamp' || el.type === 'resistor'
-      const r = el.type === 'battery' ? Math.max(prop(el, 'internalResistance'), MIN_R) : resistanceOf(el, isBurned)
       const u = volt(rowOf(el, 0)) - volt(rowOf(el, 1))
-      const i = el.type === 'battery' ? (prop(el, 'voltage') - u) / r! : r === null ? 0 : u / r
+      let r: number | null = null
+      let i: number
+      switch (el.type) {
+        case 'battery':
+          r = Math.max(prop(el, 'internalResistance'), MIN_R)
+          i = (prop(el, 'voltage') - u) / r
+          break
+        case 'capacitor': {
+          const prev = memoryIn[el.id] ?? 0
+          i = isBurned ? 0 : (capacitance(el.props) / dt) * (u - prev)
+          memory[el.id] = isBurned ? prev : u
+          break
+        }
+        case 'inductor': {
+          const prev = memoryIn[el.id] ?? 0
+          i = (dt / (prop(el, 'inductance') * 1e-3)) * u + prev
+          memory[el.id] = i
+          break
+        }
+        case 'diode':
+        case 'led':
+          i = isBurned ? 0 : lin[el.id].g * u + lin[el.id].ieq
+          memory[el.id] = isBurned ? 0 : vd[el.id]
+          break
+        default:
+          r = resistanceOf(el, isBurned)
+          i = r === null ? 0 : u / r
+      }
       const p = Math.abs(u * i)
-      const frac = heats ? p / ratedPower(el) : 0
-      const hot = el.type === 'lamp' ? LAMP_HOT : RESISTOR_HOT
+      const ratio = loadRatio(el, p, Math.abs(i), Math.abs(u))
+      const hot = HOT[el.type]
       out[el.id] = {
         status: isBurned ? 'burned' : el.type === 'switch' && r === null ? 'open' : 'ok',
         R: r,
         I: Math.abs(i),
         U: Math.abs(u),
         P: p,
-        T: isBurned ? burned[el.id] : AMBIENT + frac * (hot - AMBIENT),
-        brightness: el.type === 'lamp' && !isBurned ? Math.min(1, frac) : 0,
+        T: isBurned ? burned[el.id] : hot === undefined ? AMBIENT : AMBIENT + ratio * (hot - AMBIENT),
+        level: isBurned ? 0
+          : el.type === 'inductor' ? Math.abs(i) / (Math.abs(i) + 0.5) // magnetic field: grows with current, saturates
+          : Math.min(1, ratio),
       }
     }
-    return out
+    return { out, memory }
   }
 
   // Burning changes the circuit (the part stops conducting), so burn the single worst offender,
   // solve again, and repeat until nothing is overloaded any more.
-  let results = solveOnce()
+  let { out: results, memory } = solveOnce()
   for (;;) {
     let worst: { id: string; ratio: number } | null = null
     for (const el of elements) {
-      if ((el.type !== 'lamp' && el.type !== 'resistor') || el.id in burned) continue
-      const ratio = results[el.id].P / (ratedPower(el) * BURN_FACTOR)
+      const limit = BURN_AT[el.type]
+      if (limit === undefined || el.id in burned) continue
+      const res = results[el.id]
+      const ratio = loadRatio(el, res.P, res.I, res.U) / limit
       if (ratio > 1 && (!worst || ratio > worst.ratio)) worst = { id: el.id, ratio }
     }
     if (!worst) break
     burned[worst.id] = results[worst.id].T
-    results = solveOnce()
+    ;({ out: results, memory } = solveOnce())
   }
 
   const events: string[] = []
-  for (const el of elements) if (el.id in burned) events.push(`${names[el.id]} burned out.`)
+  for (const el of elements) {
+    if (el.id in burned) events.push(`${names[el.id]} ${BURN_VERB[el.type] ?? 'burned out'}.`)
+  }
   for (const el of elements) {
     if (el.type === 'battery' && results[el.id].I > SHORT_CIRCUIT_A) {
       events.push(`Short circuit! ${names[el.id]} delivers ${results[el.id].I.toFixed(0)} A.`)
@@ -193,7 +345,7 @@ export function simulate(data: CircuitData, burnedIn: Record<string, number> = {
   }
   const batteries = elements.filter((e) => e.type === 'battery')
   if (batteries.every((b) => results[b.id].I < 1e-9) && events.length === 0) {
-    events.push('No current flows. Is a switch open or a meter wired in the wrong way?')
+    events.push('No current flows. Open switch, reversed diode, charged capacitor or a wrongly wired meter?')
   }
-  return { result: { elements: results, events }, burned }
+  return { result: { elements: results, events }, burned, memory }
 }
