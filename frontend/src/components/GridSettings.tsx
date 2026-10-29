@@ -9,10 +9,12 @@ interface Props {
   visible: boolean
   onCellPx: (v: number) => void
   onVisible: (v: boolean) => void
+  /** Move the view back to the origin (after panning far away). */
+  onResetView: () => void
 }
 
 /** Grid button + popup. "Scale" zooms the whole schematic, so pins always stay on the grid. */
-export function GridSettings({ cellPx, visible, onCellPx, onVisible }: Props) {
+export function GridSettings({ cellPx, visible, onCellPx, onVisible, onResetView }: Props) {
   const [open, setOpen] = useState(false)
   return (
     <div className="absolute bottom-4 right-4 z-30 flex items-end gap-2" onClick={(e) => e.stopPropagation()}>
@@ -38,6 +40,12 @@ export function GridSettings({ cellPx, visible, onCellPx, onVisible }: Props) {
             <span>{MIN_CELL} px</span>
             <span>{MAX_CELL} px</span>
           </div>
+          <button
+            type="button" onClick={onResetView}
+            className="mt-3 w-full rounded border border-gray-300 bg-gray-50 px-2 py-1.5 text-sm text-gray-700 hover:bg-blue-50"
+          >
+            Reset view
+          </button>
         </div>
       )}
       <button

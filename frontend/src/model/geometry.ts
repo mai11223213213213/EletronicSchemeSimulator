@@ -1,4 +1,4 @@
-import { REGISTRY, GRID } from './registry'
+import { REGISTRY, GRID, PIN_REACH } from './registry'
 import type {
   Axis, CircuitElement, Dir, Endpoint, Junction, PinDef, Point, Rotation,
 } from './types'
@@ -29,9 +29,22 @@ export function nextRotation(r: Rotation): Rotation {
   return ((r + 45) % 360) as Rotation
 }
 
+/**
+ * Why parts are drawn slightly smaller at 45°, 135°, 225° and 315°:
+ * a pin PIN_REACH (30) from the centre, turned by 45°, lands at (21.2, 21.2) — between grid points,
+ * so wires and T-junctions would be off the grid. If the part is instead scaled to 2·√2 = 2.83 cells
+ * from the centre, the turned pin lands at exactly (20, 20): two cells right, two cells down.
+ * The shrink factor is 28.28 / 30 = 0.943, which is hardly visible.
+ */
+const DIAGONAL_SCALE = (2 * GRID * Math.SQRT2) / PIN_REACH
+
+/** 1 for 0/90/180/270, DIAGONAL_SCALE for the odd multiples of 45. Use for drawing AND for pin positions. */
+export const partScale = (rotation: Rotation) => (rotation % 90 === 0 ? 1 : DIAGONAL_SCALE)
+
 /** World position + exit axis of a pin of a placed element. */
 export function pinWorld(el: CircuitElement, pin: PinDef): Point & { axis: Axis } {
-  const r = rotatePoint(pin, el.rotation)
+  const s = partScale(el.rotation)
+  const r = rotatePoint({ x: pin.x * s, y: pin.y * s }, el.rotation)
   return { x: el.x + r.x, y: el.y + r.y, axis: axisOfDir(rotateDir(pin.dir, el.rotation)) }
 }
 

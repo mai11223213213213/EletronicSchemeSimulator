@@ -46,8 +46,10 @@ export interface Wire {
   id: string
   from: Endpoint
   to: Endpoint
-  /** Corner points the user clicked. Extra elbows are computed at render time. */
+  /** Corner points the user clicked (and can drag). In orthogonal mode extra elbows are computed at render time. */
   bends: Point[]
+  /** true = straight lines at any angle between the points; missing/false = only horizontal and vertical lines. */
+  diagonal?: boolean
 }
 
 export type Selection =

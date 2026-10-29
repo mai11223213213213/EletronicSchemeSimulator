@@ -16,6 +16,8 @@ interface CircuitState extends CircuitData {
   draft: WireDraft | null
   past: CircuitData[]
   future: CircuitData[]
+  /** Style given to NEW wires (remembered between wires). Not part of the circuit, so not in undo. */
+  diagonalWires: boolean
 
   addElement: (type: ComponentType, x: number, y: number) => void
   /** Call once when a drag starts, so the whole drag is a single undo step. */
@@ -34,6 +36,13 @@ interface CircuitState extends CircuitData {
   /** Finish the wire being drawn by T-connecting it into an existing wire. */
   finishWireOnWire: (wireId: string, p: Point) => void
   cancelWire: () => void
+  /** Orthogonal/diagonal: changes the selected wire, or the wire being drawn / future wires when none is selected. */
+  setWireStyle: (diagonal: boolean) => void
+  toggleWireStyle: () => void
+  /** Bend ("node") editing. moveBend is called many times per drag; call beginMove() once before the drag. */
+  moveBend: (wireId: string, index: number, p: Point) => void
+  insertBend: (wireId: string, index: number, p: Point) => void
+  removeBend: (wireId: string, index: number) => void
 
   undo: () => void
   redo: () => void
@@ -66,6 +75,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     draft: null,
     past: [],
     future: [],
+    diagonalWires: false,
 
     addElement: (type, x, y) => {
       commit()
@@ -150,7 +160,7 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const { draft } = get()
       if (!draft || sameEndpoint(draft.from, to)) return
       commit()
-      const wire: Wire = { id: nanoid(8), from: draft.from, to, bends: draft.bends }
+      const wire: Wire = { id: nanoid(8), from: draft.from, to, bends: draft.bends, diagonal: get().diagonalWires }
       set((s) => ({ wires: [...s.wires, wire], draft: null }))
     },
 
@@ -163,7 +173,12 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       if (!path) return
       const hit = nearestOnPath(path, rawPoint)
       if (!hit) return
-      const at = snapPoint(hit.point)
+      // Snap the junction to the grid when that keeps it ON the wire (always true for horizontal/vertical wires).
+      // A diagonal wire only passes through some grid points; there keep the exact point so the junction sits on the wire.
+      let at = snapPoint(hit.point)
+      if ((nearestOnPath(path, at)?.dist ?? Infinity) > 0.01) {
+        at = { x: Math.round(hit.point.x * 100) / 100, y: Math.round(hit.point.y * 100) / 100 }
+      }
 
       // Clicked exactly on the end of that wire: just connect to that end.
       if (same(at, path[0])) return get().finishWire(target.from)
@@ -174,15 +189,15 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
       const ends = (pts: Point[]) => pts.filter((p) => !same(p, at))
       const first: Wire = {
         id: nanoid(8), from: target.from, to: { kind: 'junction', junctionId: junction.id },
-        bends: ends(path.slice(1, hit.segment + 1)),
+        bends: ends(path.slice(1, hit.segment + 1)), diagonal: target.diagonal, // the two halves keep the old wire's style
       }
       const second: Wire = {
         id: nanoid(8), from: { kind: 'junction', junctionId: junction.id }, to: target.to,
-        bends: ends(path.slice(hit.segment + 1, -1)),
+        bends: ends(path.slice(hit.segment + 1, -1)), diagonal: target.diagonal,
       }
       const mine: Wire = {
         id: nanoid(8), from: draft.from, to: { kind: 'junction', junctionId: junction.id },
-        bends: draft.bends,
+        bends: draft.bends, diagonal: s.diagonalWires,
       }
       set((st) => ({
         junctions: [...st.junctions, junction],
@@ -192,6 +207,43 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
     },
 
     cancelWire: () => set({ draft: null }),
+
+    setWireStyle: (diagonal) => {
+      const { draft, selection, wires } = get()
+      const wire = !draft && selection?.kind === 'wire' ? wires.find((w) => w.id === selection.id) : undefined
+      if (!wire) { set({ diagonalWires: diagonal }); return } // drawing, or nothing selected: choose the style for new wires
+      if ((wire.diagonal === true) === diagonal) return
+      commit()
+      set((s) => ({ wires: s.wires.map((w) => (w.id === wire.id ? { ...w, diagonal } : w)) }))
+    },
+
+    toggleWireStyle: () => {
+      const { draft, selection, wires, diagonalWires } = get()
+      const wire = !draft && selection?.kind === 'wire' ? wires.find((w) => w.id === selection.id) : undefined
+      get().setWireStyle(!(wire ? wire.diagonal === true : diagonalWires))
+    },
+
+    moveBend: (wireId, index, p) =>
+      set((s) => ({
+        wires: s.wires.map((w) =>
+          w.id === wireId ? { ...w, bends: w.bends.map((b, i) => (i === index ? p : b)) } : w),
+      })),
+
+    insertBend: (wireId, index, p) => {
+      commit()
+      set((s) => ({
+        wires: s.wires.map((w) =>
+          w.id === wireId ? { ...w, bends: [...w.bends.slice(0, index), p, ...w.bends.slice(index)] } : w),
+      }))
+    },
+
+    removeBend: (wireId, index) => {
+      commit()
+      set((s) => ({
+        wires: s.wires.map((w) =>
+          w.id === wireId ? { ...w, bends: w.bends.filter((_, i) => i !== index) } : w),
+      }))
+    },
 
     undo: () =>
       set((s) => {

@@ -2,11 +2,10 @@
   "name": "frontend",
   "version": "0.0.0",
   "private": true,
-  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "description": "Electronic Scheme Simulator - React + TypeScript + Vite frontend",
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "eslint.config.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

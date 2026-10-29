@@ -5,11 +5,19 @@ import type { CircuitData } from '../model/types'
 interface Props {
   data: CircuitData
   drawing: boolean
+  /** Current zoom (screen px per world unit), so the click area can keep a constant size on screen. */
+  scale: number
   onPinClick: (e: ReactMouseEvent, elementId: string, pinId: string) => void
 }
 
+/** Radius of the invisible click area around a pin, in SCREEN pixels. The visible ring is only 3–4.5 px. */
+const HIT_RADIUS_PX = 14
+
 /** Clickable connection points. Rings show where a wire can start or end. */
-export function PinLayer({ data, drawing, onPinClick }: Props) {
+export function PinLayer({ data, drawing, scale, onPinClick }: Props) {
+  // This layer sits inside the zoomed group, so a radius in world units shrinks when zooming out.
+  // Dividing by the zoom gives the same on-screen size at every zoom level.
+  const hitRadius = HIT_RADIUS_PX / scale
   // how many wire ends touch each pin
   const wiresAt = new Map<string, number>()
   for (const w of data.wires)
@@ -26,7 +34,7 @@ export function PinLayer({ data, drawing, onPinClick }: Props) {
           const count = wiresAt.get(`${el.id}:${pin.id}`) ?? 0
           return (
             <g key={`${el.id}:${pin.id}`} className="cursor-crosshair group" onClick={(e) => onPinClick(e, el.id, pin.id)}>
-              <circle cx={x} cy={y} r="8" fill="transparent" />
+              <circle cx={x} cy={y} r={hitRadius} fill="transparent" />
               {count === 0 && (
                 <circle
                   cx={x} cy={y} r={drawing ? 4.5 : 3}

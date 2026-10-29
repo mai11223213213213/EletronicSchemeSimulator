@@ -1,16 +1,19 @@
 import { HelpCircle } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
-import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent,
+} from 'react'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { endpointPos, snapPoint } from '../model/geometry'
 import { GRID, isComponentType } from '../model/registry'
-import { routeOrthogonal, toPathData } from '../model/routing'
+import { nearestOnPath, routeWire, toPathData } from '../model/routing'
+import { wirePath } from '../model/wires'
 import type { CircuitElement, Point } from '../model/types'
 import { useCircuitStore } from '../store/circuitStore'
 import { ElementView } from './ElementView'
 import { GridSettings } from './GridSettings'
 import { PinLayer } from './PinLayer'
-import { PropertiesPanel } from './PropertiesPanel'
 import { WireLayer } from './WireLayer'
 
 export function Canvas() {
@@ -30,14 +33,23 @@ export function Canvas() {
   const finishWireOnWire = useCircuitStore((s) => s.finishWireOnWire)
   const cancelWire = useCircuitStore((s) => s.cancelWire)
   const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
+  const moveBend = useCircuitStore((s) => s.moveBend)
+  const insertBend = useCircuitStore((s) => s.insertBend)
+  const removeBend = useCircuitStore((s) => s.removeBend)
+  const diagonalWires = useCircuitStore((s) => s.diagonalWires)
 
   const [cellPx, setCellPx] = useState(GRID)
   const [gridVisible, setGridVisible] = useState(true)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+  const [pan, setPan] = useState<Point>({ x: 0, y: 0 }) // how far the world is shifted, in screen pixels
+  const [panning, setPanning] = useState(false)
 
-  const worldRef = useRef<SVGGElement>(null) // the <g> that carries the zoom transform
+  const worldRef = useRef<SVGGElement>(null) // the <g> that carries the pan + zoom transform
   const scale = cellPx / GRID
   const drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null)
+  // Pan gesture: remembers where the pointer and the pan were when the button went down.
+  const panDrag = useRef<{ x: number; y: number; panX: number; panY: number; active: boolean } | null>(null)
+  const justPanned = useRef(false) // true after a pan, so the click that ends it is not treated as "click on empty canvas"
 
   useKeyboardShortcuts()
 
@@ -96,20 +108,90 @@ export function Canvas() {
     if (draft) finishWire(ep)
     else startWire(ep)
   }
+  // ---- editing the bends ("nodes") of the selected wire -------------------------
+  // Same recipe as dragging a part: pointer capture on the handle, snap to the grid, one undo step per drag.
+  const bendDrag = useRef<{ moved: boolean } | null>(null)
+  const onBendPointerDown = (e: ReactPointerEvent<SVGCircleElement>) => {
+    e.stopPropagation() // so the canvas does not start panning
+    e.currentTarget.setPointerCapture(e.pointerId)
+    bendDrag.current = { moved: false }
+  }
+  const onBendPointerMove = (e: ReactPointerEvent<SVGCircleElement>, wireId: string, index: number) => {
+    const d = bendDrag.current
+    if (!d) return
+    const p = snapPoint(toWorld(e.clientX, e.clientY))
+    const current = wires.find((w) => w.id === wireId)?.bends[index]
+    if (!current || (current.x === p.x && current.y === p.y)) return
+    if (!d.moved) { beginMove(); d.moved = true } // saves the undo snapshot once, at the first real movement
+    moveBend(wireId, index, p)
+  }
+  const onBendPointerUp = (e: ReactPointerEvent<SVGCircleElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    bendDrag.current = null
+  }
+  /**
+   * Double-click on a diagonal wire adds a bend where you clicked. A diagonal wire's drawn path is exactly
+   * [start, ...bends, end], so the segment you hit (hit.segment) is also the position the new bend must take in `bends`.
+   * (An orthogonal wire's path contains computed elbows, so this index trick would not hold there.)
+   */
+  const onWireDoubleClick = (e: ReactMouseEvent, wireId: string) => {
+    e.stopPropagation()
+    const wire = wires.find((w) => w.id === wireId)
+    if (!wire?.diagonal) return
+    const path = wirePath(wire, { elements, junctions })
+    const hit = path && nearestOnPath(path, toWorld(e.clientX, e.clientY))
+    if (hit) insertBend(wireId, hit.segment, snapPoint(hit.point))
+  }
+
   const onWireClick = (e: ReactMouseEvent, wireId: string) => {
     e.stopPropagation()
     if (draft) finishWireOnWire(wireId, toWorld(e.clientX, e.clientY))
     else select({ kind: 'wire', id: wireId })
   }
   const onBackgroundClick = (e: ReactMouseEvent) => {
+    if (justPanned.current) { justPanned.current = false; return } // the click that ended a pan does nothing
     if (draft) addBend(snapPoint(toWorld(e.clientX, e.clientY)))
     else select(null)
+  }
+
+  // ---- panning ----------------------------------------------------------------
+  // Drag empty canvas (left or middle button, or a finger) to move the view; the mouse wheel pans too.
+  // Pointer capture is only taken once the pointer has moved a few pixels. Capturing at pointerdown would
+  // redirect the following click to the <svg> and break clicks on pins and wires.
+  const PAN_THRESHOLD = 4
+  const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    justPanned.current = false
+    if (e.button !== 0 && e.button !== 1) return
+    panDrag.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, active: false }
+  }
+  const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const d = panDrag.current
+    if (d) {
+      if (!d.active && Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD) {
+        d.active = true
+        justPanned.current = true
+        setPanning(true)
+        e.currentTarget.setPointerCapture(e.pointerId)
+      }
+      if (d.active) setPan({ x: d.panX + e.clientX - d.x, y: d.panY + e.clientY - d.y })
+    }
+    if (draft) setCursor(snapPoint(toWorld(e.clientX, e.clientY)))
+  }
+  const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    panDrag.current = null
+    setPanning(false)
+  }
+  const onSvgWheel = (e: ReactWheelEvent<SVGSVGElement>) => {
+    const dx = e.shiftKey ? e.deltaY : e.deltaX // Shift + wheel = sideways
+    const dy = e.shiftKey ? 0 : e.deltaY
+    setPan((p) => ({ x: p.x - dx, y: p.y - dy }))
   }
 
   // live preview of the wire being drawn
   const start = draft ? endpointPos(draft.from, elements, junctions) : null
   const previewD = draft && start
-    ? toPathData(routeOrthogonal(start, draft.bends, cursor, start.axis, null))
+    ? toPathData(routeWire(start, draft.bends, cursor, start.axis, null, diagonalWires))
     : null
 
   const cell = cellPx
@@ -120,26 +202,36 @@ export function Canvas() {
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
     >
       <svg
-        className={`absolute inset-0 h-full w-full touch-none ${draft ? 'cursor-crosshair' : ''}`}
+        className={`absolute inset-0 h-full w-full touch-none ${panning ? 'cursor-grabbing' : draft ? 'cursor-crosshair' : ''}`}
         onClick={onBackgroundClick}
-        onPointerMove={(e) => draft && setCursor(snapPoint(toWorld(e.clientX, e.clientY)))}
+        onPointerDown={onSvgPointerDown}
+        onPointerMove={onSvgPointerMove}
+        onPointerUp={onSvgPointerUp}
+        onPointerCancel={onSvgPointerUp}
+        onWheel={onSvgWheel}
         onContextMenu={(e) => { if (draft) { e.preventDefault(); cancelWire() } }}
       >
         <defs>
-          {/* shifted by half a cell so the dot sits in the tile centre (no clipping) yet lands on grid points */}
-          <pattern id="grid" width={cell} height={cell} x={-cell / 2} y={-cell / 2} patternUnits="userSpaceOnUse">
+          {/* shifted by half a cell so the dot sits in the tile centre (no clipping) yet lands on grid points;
+              plus the pan, so the dots move together with the schematic */}
+          <pattern id="grid" width={cell} height={cell} x={pan.x - cell / 2} y={pan.y - cell / 2} patternUnits="userSpaceOnUse">
             <circle cx={cell / 2} cy={cell / 2} r="1" fill="#cbd5e1" />
           </pattern>
         </defs>
         {gridVisible && <rect width="100%" height="100%" fill="url(#grid)" />}
 
-        {/* everything below lives in world units; zoom = scale */}
-        <g ref={worldRef} transform={`scale(${scale})`}>
+        {/* everything below lives in world units. SVG applies the list right to left: first zoom (scale), then shift (pan) */}
+        <g ref={worldRef} transform={`translate(${pan.x} ${pan.y}) scale(${scale})`}>
           <WireLayer
             data={{ elements, wires, junctions }}
             selection={selection}
             onWireClick={onWireClick}
+            onWireDoubleClick={onWireDoubleClick}
             onJunctionClick={onJunctionClick}
+            onBendPointerDown={onBendPointerDown}
+            onBendPointerMove={onBendPointerMove}
+            onBendPointerUp={onBendPointerUp}
+            onBendRemove={removeBend}
           />
           {elements.map((el) => (
             <ElementView
@@ -152,7 +244,7 @@ export function Canvas() {
               onToggle={(x) => toggleSwitch(x.id)}
             />
           ))}
-          <PinLayer data={{ elements, wires, junctions }} drawing={!!draft} onPinClick={onPinClick} />
+          <PinLayer data={{ elements, wires, junctions }} drawing={!!draft} scale={scale} onPinClick={onPinClick} />
           {previewD && (
             <path d={previewD} stroke="#2563eb" strokeWidth="2" strokeDasharray="5 4" fill="none" pointerEvents="none" />
           )}
@@ -168,13 +260,15 @@ export function Canvas() {
         </button>
         <div className="pointer-events-none absolute right-full top-0 mr-2 hidden w-64 rounded-md bg-white px-3 py-2 text-xs text-gray-600 shadow-lg group-focus-within:block group-hover:block">
           {draft
-            ? 'Click canvas — add bend · click pin/wire — finish · Esc — cancel'
-            : 'Click pin — new wire · R — rotate · Del — delete · Ctrl+Z — undo'}
+            ? 'Click canvas — add bend · click pin/wire — finish · D — diagonal/straight · Esc — cancel'
+            : 'Click pin — new wire · Drag canvas / wheel — pan · R — rotate · Del — delete · Ctrl+Z — undo'}
         </div>
       </div>
 
-      <PropertiesPanel />
-      <GridSettings cellPx={cellPx} visible={gridVisible} onCellPx={setCellPx} onVisible={setGridVisible} />
+      <GridSettings
+        cellPx={cellPx} visible={gridVisible} onCellPx={setCellPx} onVisible={setGridVisible}
+        onResetView={() => setPan({ x: 0, y: 0 })}
+      />
     </div>
   )
 }

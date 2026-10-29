@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { REGISTRY } from '../model/registry'
 import { useCircuitStore } from '../store/circuitStore'
-import { useConsoleVisible } from '../store/simStore'
 
 /** Edit the numbers of the selected part (resistance, voltage, ...). Hidden when nothing is selected. */
 export function PropertiesPanel() {
@@ -9,13 +8,12 @@ export function PropertiesPanel() {
     s.selection?.kind === 'element' ? s.elements.find((e) => e.id === s.selection!.id) : undefined)
   const setProp = useCircuitStore((s) => s.setProp)
   const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
-  const readoutVisible = useConsoleVisible() // step left so we do not sit under the simulation card
   if (!element) return null
 
   const def = REGISTRY[element.type]
   return (
     <div
-      className={`absolute ${readoutVisible ? 'right-[19.5rem]' : 'right-4'} top-14 z-20 w-56 rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur`}
+      className="pointer-events-auto shrink-0 rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur"
       onClick={(e) => e.stopPropagation()}
     >
       <h3 className="mb-2 text-sm font-semibold text-gray-800">{def.label}</h3>

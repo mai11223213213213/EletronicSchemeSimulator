@@ -3,6 +3,13 @@ import type { ComponentType, ElementProps, PinDef } from './types'
 /** One grid cell in world units. All pins sit on multiples of this. */
 export const GRID = 10
 
+/**
+ * Distance from a part's centre to each of its two pins: 3 grid cells.
+ * Rotating by 0/90/180/270 keeps the pins on the grid; for the diagonal angles geometry.ts shrinks the
+ * part slightly (see `partScale`) so they land on the grid there too.
+ */
+export const PIN_REACH = 3 * GRID
+
 /** A number the user can edit in the properties panel. */
 export interface FieldDef {
   key: string
@@ -27,14 +34,14 @@ export interface ComponentDef {
 /**
  * Single source of truth for every component.
  * Origin (0,0) = centre of the part; pins sit on grid points so they stay on the grid
- * after any 90° rotation.
+ * after any rotation (multiples of 45°, see `partScale`).
  */
 export const REGISTRY: Record<ComponentType, ComponentDef> = {
   battery: {
     label: 'Power source',
     pins: [
-      { id: 'plus', x: -30, y: 0, dir: 'W' },
-      { id: 'minus', x: 30, y: 0, dir: 'E' },
+      { id: 'plus', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'minus', x: PIN_REACH, y: 0, dir: 'E' },
     ],
     halfW: 35,
     halfH: 20,
@@ -48,8 +55,8 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
   resistor: {
     label: 'Resistor',
     pins: [
-      { id: 'a', x: -30, y: 0, dir: 'W' },
-      { id: 'b', x: 30, y: 0, dir: 'E' },
+      { id: 'a', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'b', x: PIN_REACH, y: 0, dir: 'E' },
     ],
     halfW: 35,
     halfH: 15,
@@ -63,8 +70,8 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
   lamp: {
     label: 'Incandescent lamp',
     pins: [
-      { id: 'a', x: -30, y: 0, dir: 'W' },
-      { id: 'b', x: 30, y: 0, dir: 'E' },
+      { id: 'a', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'b', x: PIN_REACH, y: 0, dir: 'E' },
     ],
     halfW: 35,
     halfH: 20,
@@ -78,8 +85,8 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
   switch: {
     label: 'Switch',
     pins: [
-      { id: 'a', x: -30, y: 0, dir: 'W' },
-      { id: 'b', x: 30, y: 0, dir: 'E' },
+      { id: 'a', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'b', x: PIN_REACH, y: 0, dir: 'E' },
     ],
     halfW: 35,
     halfH: 20,
@@ -91,8 +98,8 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
   ammeter: {
     label: 'Ammeter',
     pins: [
-      { id: 'a', x: -30, y: 0, dir: 'W' },
-      { id: 'b', x: 30, y: 0, dir: 'E' },
+      { id: 'a', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'b', x: PIN_REACH, y: 0, dir: 'E' },
     ],
     halfW: 35,
     halfH: 20,
@@ -103,8 +110,8 @@ export const REGISTRY: Record<ComponentType, ComponentDef> = {
   voltmeter: {
     label: 'Voltmeter',
     pins: [
-      { id: 'a', x: -30, y: 0, dir: 'W' },
-      { id: 'b', x: 30, y: 0, dir: 'E' },
+      { id: 'a', x: -PIN_REACH, y: 0, dir: 'W' },
+      { id: 'b', x: PIN_REACH, y: 0, dir: 'E' },
     ],
     halfW: 35,
     halfH: 20,

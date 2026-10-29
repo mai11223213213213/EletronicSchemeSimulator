@@ -9,7 +9,7 @@ Drag parts onto the canvas, connect them with wires, press **Start simulation**,
 **Editor**
 - Drag parts from the components list onto a grid canvas.
 - Parts: power source, resistor, incandescent lamp, switch, ammeter, voltmeter.
-- Wires route themselves with horizontal and vertical segments. Click the canvas to add bends, or click an existing wire to make a T-junction.
+- Wires are straight (horizontal/vertical, routed automatically) or diagonal (free angle). Click the canvas to add bends, drag the bends of a selected wire to reshape it, or click an existing wire to make a T-junction.
 - Rotate parts in 45° steps, move them with the mouse, edit their values in the properties panel.
 - Undo / redo, grid on/off and zoom.
 
@@ -31,6 +31,10 @@ Drag parts onto the canvas, connect them with wires, press **Start simulation**,
 | Start a wire | Click a pin |
 | Add a bend | Click the empty canvas while drawing |
 | Finish a wire | Click another pin, a junction, or a wire |
+| Diagonal / straight wire | `D` while drawing or with a wire selected, or the **Wire** card |
+| Move a wire bend | Select the wire, drag a white dot |
+| Add / remove a bend | Double-click a diagonal wire / double-click a dot |
+| Pan the canvas | Drag empty canvas, or mouse wheel (Shift = sideways) |
 | Cancel a wire | `Esc` or right-click |
 | Rotate selected part | `R` (45° per press) |
 | Delete selected | `Del` / `Backspace` |

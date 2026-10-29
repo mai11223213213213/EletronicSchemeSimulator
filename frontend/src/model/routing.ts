@@ -62,20 +62,48 @@ export function routeOrthogonal(
   return simplify(out)
 }
 
+/**
+ * Free-angle wire: just straight segments  start → bend 1 → bend 2 → … → end.
+ * Nothing is inserted between the points, so a segment can run at any angle (diagonal).
+ */
+export function routeDiagonal(start: Point, bends: Point[], end: Point): Point[] {
+  const out: Point[] = []
+  for (const { x, y } of [start, ...bends, end]) { // destructure to drop extra fields like `axis`
+    const p = { x, y }
+    if (!out.length || !eq(out[out.length - 1], p)) out.push(p) // skip duplicates
+  }
+  return out
+}
+
+/** The one entry point the app uses: picks the routing style of the wire. */
+export function routeWire(
+  start: Point,
+  bends: Point[],
+  end: Point,
+  startAxis: Axis | null,
+  endAxis: Axis | null,
+  diagonal: boolean,
+): Point[] {
+  return diagonal ? routeDiagonal(start, bends, end) : routeOrthogonal(start, bends, end, startAxis, endAxis)
+}
+
 export const toPathData = (pts: Point[]) =>
   pts.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')
 
-/** Closest point on the path to `p`, with the index of the segment it lies on. */
+/**
+ * Closest point on the path to `p`, with the index of the segment it lies on.
+ * Works for a segment at any angle: project p onto the line a→b (t = how far along it, 0…1), clamp to the ends.
+ */
 export function nearestOnPath(pts: Point[], p: Point) {
   let best: { point: Point; segment: number; dist: number } | null = null
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i]
     const b = pts[i + 1]
-    const horizontal = a.y === b.y
-    const lo = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y)
-    const hi = horizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y)
-    const t = Math.min(hi, Math.max(lo, horizontal ? p.x : p.y))
-    const point = horizontal ? { x: t, y: a.y } : { x: a.x, y: t }
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const len2 = dx * dx + dy * dy
+    const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
+    const point = { x: a.x + t * dx, y: a.y + t * dy }
     const dist = Math.hypot(point.x - p.x, point.y - p.y)
     if (!best || dist < best.dist) best = { point, segment: i, dist }
   }

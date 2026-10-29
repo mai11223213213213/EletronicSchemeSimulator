@@ -4,7 +4,7 @@ import { useCircuitStore } from '../store/circuitStore'
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
 
-/** R rotate · Delete remove · Esc cancel wire/deselect · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo/redo */
+/** R rotate · D wire style (orthogonal/diagonal) · Delete remove · Esc cancel wire/deselect · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo/redo */
 export function useKeyboardShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -23,6 +23,7 @@ export function useKeyboardShortcuts() {
       if (mod || e.altKey) return
 
       if (k === 'r') st.rotateSelected()
+      else if (k === 'd') st.toggleWireStyle()
       else if (k === 'delete' || k === 'backspace') st.deleteSelected()
       else if (k === 'escape') {
         if (st.draft) st.cancelWire()

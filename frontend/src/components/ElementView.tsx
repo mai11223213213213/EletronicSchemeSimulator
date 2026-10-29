@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { rotatePoint } from '../model/geometry'
+import { partScale, rotatePoint } from '../model/geometry'
 import { REGISTRY } from '../model/registry'
 import { AMBIENT, RESISTOR_HOT } from '../model/solver'
 import type { CircuitElement } from '../model/types'
@@ -35,14 +35,15 @@ export function ElementView({ element: el, selected, onPointerDown, onPointerMov
 
   // The value label sits on the "top" side of the part and follows it when rotated,
   // but the text itself always stays horizontal and readable.
-  const at = rotatePoint({ x: 0, y: -(def.halfH + 3) }, el.rotation)
+  const scale = partScale(el.rotation) // the drawing is a bit smaller at 45° so its pins stay on the grid
+  const at = rotatePoint({ x: 0, y: -(def.halfH + 3) * scale }, el.rotation)
   const anchor = at.x > 0 ? 'start' : at.x < 0 ? 'end' : 'middle'
   const baseline = at.y > 0 ? 'hanging' : at.y < 0 ? 'auto' : 'middle'
 
   return (
     <g transform={`translate(${el.x} ${el.y})`}>
       <g
-        transform={`rotate(${el.rotation})`}
+        transform={`rotate(${el.rotation}) scale(${scale})`}
         className="cursor-move"
         onPointerDown={(e) => onPointerDown(e, el)}
         onPointerMove={(e) => onPointerMove(e, el)}
