@@ -1,6 +1,6 @@
 
 import { AuthPage } from '../components/AuthPage'
-import { CircuitWorkspace } from '../components/CircuitWorkspace'
+import { PersonalPage } from '../components/PersonalPage'
 import { WorkspaceSkeleton } from '../components/WorkspaceSkeleton'
 import { useAuth } from '../auth/AuthContext'
 
@@ -15,9 +15,5 @@ export function AppContent() {
     return <AuthPage />
   }
 
-  return (
-    <main className="h-screen w-screen overflow-hidden bg-[#101716]">
-      <CircuitWorkspace />
-    </main>
-  )
+  return <PersonalPage />
 }
