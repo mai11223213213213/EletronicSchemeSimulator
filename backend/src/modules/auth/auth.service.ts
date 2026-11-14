@@ -53,7 +53,7 @@ export async function registerUser(data: RegisterInput) {
 
   if (existingUser) {
     throw new AppError(
-      'Користувач із такою email-адресою вже існує',
+      'The user with this email address already exists',
       409,
     );
   }
@@ -85,7 +85,7 @@ export async function loginUser(data: LoginInput) {
 
   if (!user) {
     throw new AppError(
-      'Неправильна email-адреса або пароль',
+      'Invalid email address or password',
       401,
     );
   }
@@ -97,7 +97,7 @@ export async function loginUser(data: LoginInput) {
 
   if (!passwordIsValid) {
     throw new AppError(
-      'Неправильна email-адреса або пароль',
+      'Invalid email address or password',
       401,
     );
   }

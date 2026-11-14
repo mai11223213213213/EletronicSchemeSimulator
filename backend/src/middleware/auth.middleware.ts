@@ -24,7 +24,7 @@ export function requireAuth(
 
   if (!token) {
     return res.status(401).json({
-      message: 'Необхідно авторизуватися',
+      message: 'Authentication required',
     });
   }
 
@@ -37,7 +37,7 @@ export function requireAuth(
     );
 
     return res.status(401).json({
-      message: 'Сесія недійсна або завершилася',
+      message: 'Session is invalid or has expired',
     });
   }
 

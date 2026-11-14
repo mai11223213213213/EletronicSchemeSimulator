@@ -11,7 +11,7 @@ export function errorMiddleware(
 ) {
   if (error instanceof ZodError) {
     return res.status(400).json({
-      message: 'Помилка валідації даних',
+      message: 'Data validation error',
       errors: error.issues.map((issue) => ({
         field: issue.path.join('.'),
         message: issue.message,
@@ -28,6 +28,6 @@ export function errorMiddleware(
   console.error('Unhandled server error:', error);
 
   return res.status(500).json({
-    message: 'Внутрішня помилка сервера',
+    message: 'Internal server error',
   });
 }

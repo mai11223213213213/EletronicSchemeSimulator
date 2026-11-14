@@ -38,7 +38,7 @@ export async function register(
     );
 
     return res.status(201).json({
-      message: 'Реєстрація успішна',
+      message: 'Registration successful',
       user,
     });
   } catch (error) {
@@ -66,7 +66,7 @@ export async function login(
     );
 
     return res.status(200).json({
-      message: 'Авторизація успішна',
+      message: 'Login successful',
       user,
     });
   } catch (error) {
@@ -90,7 +90,7 @@ export function logout(
   );
 
   return res.status(200).json({
-    message: 'Ви успішно вийшли з акаунта',
+    message: 'You have successfully logged out of your account',
   });
 }
 
@@ -102,13 +102,13 @@ export async function me(
 ) {
   try {
     if (!req.userId) {
-      throw new AppError('Необхідна авторизація', 401);
+      throw new AppError('Authentication required', 401);
     }
 
     const user = await getPublicUser(req.userId);
 
     if (!user) {
-      throw new AppError('Користувача не знайдено', 404);
+      throw new AppError('User not found', 404);
     }
 
     return res.status(200).json({ user });
