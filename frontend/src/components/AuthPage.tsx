@@ -169,7 +169,7 @@ export function AuthPage() {
         </svg>
       </div>
 
-      <div className="relative content-center z-10 grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[1fr_440px]">
+      <div className="relative z-10 w-full max-w-md">
         {/* Branding */}
         {/* <section className="hidden lg:block">
           <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-[#d9d4c8] bg-white/60 px-4 py-2 text-sm text-[#626a60] shadow-sm backdrop-blur">
