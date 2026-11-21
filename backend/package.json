@@ -13,7 +13,8 @@
     "db:validate": "prisma validate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "tscheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@prisma/client": "6.2.1",
