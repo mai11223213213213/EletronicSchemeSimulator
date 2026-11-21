@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { getCircuit, updateCircuit } from '../api/circuits'
 import { useCircuitStore } from '../store/circuitStore'
 import { CircuitWorkspace } from './CircuitWorkspace'
+import { WorkspaceSkeleton } from './WorkspaceSkeleton'
 
 export function CircuitEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -91,17 +92,13 @@ useEffect(() => {
   }
 
   if (loadedId !== id) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#101716] text-sm text-white">
-        Loading circuit...
-      </div>
-    )
-  }
+  return <WorkspaceSkeleton />
+    }
 
   return (
     <>
       <CircuitWorkspace />
-
+    
       {error && (
         <div
           role="alert"
