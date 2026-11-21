@@ -1,6 +1,5 @@
-
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CircuitBoard,
   LogOut,
@@ -9,116 +8,110 @@ import {
   LoaderCircle,
   Pencil,
   Trash2,
-} from 'lucide-react'
+} from "lucide-react";
 
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from "../auth/AuthContext";
 import {
   createCircuit,
   getCircuits,
   updateCircuit,
   deleteCircuit,
   type Circuit,
-} from '../api/circuits'
+} from "../api/circuits";
 
 export function PersonalPage() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const [circuits, setCircuits] = useState<Circuit[]>([])
-  const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [error, setError] = useState('')
+  const [circuits, setCircuits] = useState<Circuit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [error, setError] = useState("");
+  const [renameTarget, setRenameTarget] = useState<Circuit | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Circuit | null>(null);
+
+  const [renameValue, setRenameValue] = useState("");
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState("");
 
   useEffect(() => {
-    let active = true
+    let active = true;
 
     getCircuits()
       .then((data) => {
-        if (active) setCircuits(data)
+        if (active) setCircuits(data);
       })
       .catch((err) => {
         if (active) {
-          setError(err instanceof Error ? err.message : 'Unable to load your circuits.')
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load your circuits.",
+          );
         }
       })
       .finally(() => {
-        if (active) setLoading(false)
-      })
+        if (active) setLoading(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [])
+      active = false;
+    };
+  }, []);
 
   async function handleCreateCircuit() {
-    setError('')
-    setCreating(true)
+    setError("");
+    setCreating(true);
 
     try {
-      const circuit = await createCircuit()
-      navigate(`/editor/${circuit.id}`)
+      const circuit = await createCircuit();
+      navigate(`/editor/${circuit.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to create a circuit.')
+      setError(
+        err instanceof Error ? err.message : "Unable to create a circuit.",
+      );
     } finally {
-      setCreating(false)
+      setCreating(false);
     }
   }
 
-  async function handleRename(circuit: Circuit) {
-    const newName = window.prompt('Enter a new circuit name:', circuit.name)?.trim()
+function openRenameModal(circuit: Circuit) {
+  setRenameTarget(circuit)
+  setRenameValue(circuit.name)
+  setModalError('')
+}
 
-    if (!newName || newName === circuit.name) return
-
-    try {
-      const updated = await updateCircuit(circuit.id, { name: newName })
-
-      setCircuits((current) =>
-        current.map((item) => item.id === circuit.id ? updated : item),
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to rename this circuit.')
-    }
-  }
-
-  async function handleDelete(circuit: Circuit) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${circuit.name}"? This action cannot be undone.`,
-    )
-
-    if (!confirmed) return
-
-    try {
-      await deleteCircuit(circuit.id)
-      setCircuits((current) =>
-        current.filter((item) => item.id !== circuit.id),
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to delete this circuit.')
-    }
-  }
+function openDeleteModal(circuit: Circuit) {
+  setDeleteTarget(circuit)
+  setModalError('')
+}
 
   async function handleLogout() {
-    setError('')
-    setIsLoggingOut(true)
+    setError("");
+    setIsLoggingOut(true);
 
     try {
-      await logout()
+      await logout();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign out. Please try again.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to sign out. Please try again.",
+      );
     } finally {
-      setIsLoggingOut(false)
+      setIsLoggingOut(false);
     }
   }
 
-  const initials = user?.email?.slice(0, 1).toUpperCase() ?? 'U'
+  const initials = user?.email?.slice(0, 1).toUpperCase() ?? "U";
 
   function formatDate(date: string) {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    return new Date(date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }
 
   return (
@@ -155,7 +148,7 @@ export function PersonalPage() {
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden md:inline">
-                {isLoggingOut ? 'Signing out...' : 'Sign out'}
+                {isLoggingOut ? "Signing out..." : "Sign out"}
               </span>
             </button>
           </div>
@@ -168,7 +161,9 @@ export function PersonalPage() {
             <p className="mb-2 text-xs font-medium text-[#829087]">
               Personal workspace
             </p>
-            <h1 className="text-3xl font-semibold tracking-tight">My circuits</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              My circuits
+            </h1>
             <p className="mt-2 text-sm text-[#7f8c83]">
               Your electronic circuit designs.
             </p>
@@ -185,12 +180,15 @@ export function PersonalPage() {
             ) : (
               <Plus className="h-4 w-4" />
             )}
-            {creating ? 'Creating...' : 'New circuit'}
+            {creating ? "Creating..." : "New circuit"}
           </button>
         </div>
 
         {error && (
-          <p role="alert" className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+          <p
+            role="alert"
+            className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+          >
             {error}
           </p>
         )}
@@ -198,7 +196,10 @@ export function PersonalPage() {
         {loading ? (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="h-40 animate-pulse rounded-xl border border-[#dfe5e1] bg-white" />
+              <div
+                key={index}
+                className="h-40 animate-pulse rounded-xl border border-[#dfe5e1] bg-white"
+              />
             ))}
           </div>
         ) : circuits.length === 0 ? (
@@ -206,7 +207,9 @@ export function PersonalPage() {
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-[#dce8df] bg-[#f0f5f1]">
               <CircuitBoard className="h-9 w-9 text-[#176b4b]" />
             </div>
-            <h2 className="mt-7 text-base font-semibold text-[#354239]">No circuits yet</h2>
+            <h2 className="mt-7 text-base font-semibold text-[#354239]">
+              No circuits yet
+            </h2>
             <p className="mt-2 max-w-sm text-sm leading-6 text-[#89948d]">
               Create your first circuit and start designing.
             </p>
@@ -235,7 +238,7 @@ export function PersonalPage() {
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => handleRename(circuit)}
+                      onClick={() => openRenameModal(circuit)}
                       title="Rename circuit"
                       aria-label={`Rename ${circuit.name}`}
                       className="rounded-md p-2 text-[#829087] transition hover:bg-[#edf4ef] hover:text-[#176b4b]"
@@ -245,7 +248,7 @@ export function PersonalPage() {
 
                     <button
                       type="button"
-                      onClick={() => handleDelete(circuit)}
+                      onClick={() => openDeleteModal(circuit)}
                       title="Delete circuit"
                       aria-label={`Delete ${circuit.name}`}
                       className="rounded-md p-2 text-[#a0aaa3] transition hover:bg-rose-50 hover:text-red-600"
@@ -274,5 +277,5 @@ export function PersonalPage() {
         )}
       </section>
     </main>
-  )
+  );
 }
