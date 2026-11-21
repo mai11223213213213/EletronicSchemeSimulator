@@ -15,8 +15,7 @@
   "type": "commonjs",
   "workspaces": [
     "backend",
-    "frontend",
-    "shared"
+    "frontend"
   ],
   "scripts": {
     "test": "echo \"No root tests configured\"",
