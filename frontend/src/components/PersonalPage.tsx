@@ -1,17 +1,73 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   CircuitBoard,
   LogOut,
   Plus,
+  Clock3,
+  LoaderCircle,
 } from 'lucide-react'
 
 import { useAuth } from '../auth/AuthContext'
+import {
+  createCircuit,
+  getCircuits,
+  type Circuit,
+} from '../api/circuits'
 
 export function PersonalPage() {
   const { user, logout } = useAuth()
-  const [error, setError] = useState('')
+  const navigate = useNavigate()
+
+  const [circuits, setCircuits] = useState<Circuit[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    getCircuits()
+      .then((data) => {
+        if (active) setCircuits(data)
+      })
+      .catch((err) => {
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to load your circuits.',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function handleCreateCircuit() {
+    setError('')
+    setCreating(true)
+
+    try {
+      const circuit = await createCircuit()
+      navigate(`/editor/${circuit.id}`)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to create a circuit.',
+      )
+    } finally {
+      setCreating(false)
+    }
+  }
 
   async function handleLogout() {
     setError('')
@@ -32,9 +88,16 @@ export function PersonalPage() {
 
   const initials = user?.email?.slice(0, 1).toUpperCase() ?? 'U'
 
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
   return (
     <main className="min-h-screen bg-[#f1f3f2] text-[#26332d]">
-      {/* Header */}
       <header className="sticky top-0 z-30 border-b border-[#dfe5e1] bg-white">
         <div className="mx-auto flex h-[68px] max-w-[1500px] items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-3">
@@ -42,7 +105,7 @@ export function PersonalPage() {
               <CircuitBoard className="h-5 w-5" />
             </div>
 
-            <p className="text-sm font-bold tracking-tight text-[#26332d]">
+            <p className="text-sm font-bold tracking-tight">
               Electronic Scheme Simulator
             </p>
           </div>
@@ -76,52 +139,35 @@ export function PersonalPage() {
         </div>
       </header>
 
-      {/* Main content */}
       <section className="mx-auto max-w-[1500px] px-5 py-9 sm:px-8 sm:py-12">
-        <div className="border-b border-[#dfe5e1] pb-7">
-          <p className="mb-2 text-xs font-medium text-[#829087]">
-            Personal workspace
-          </p>
-
-          <h1 className="text-3xl font-semibold tracking-tight text-[#26332d]">
-            My circuits
-          </h1>
-
-          <p className="mt-2 text-sm text-[#7f8c83]">
-            Your electronic circuit designs.
-          </p>
-        </div>
-
-        {/* Projects */}
-        <div className="mt-8">
-          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#cbd7ce] bg-white px-6 py-12 text-center">
-            <div className="relative flex h-24 w-24 items-center justify-center rounded-2xl border border-[#dce8df] bg-[#f0f5f1]">
-              <div className="absolute left-[-17px] top-1/2 h-px w-[17px] bg-[#78a58a]" />
-              <div className="absolute right-[-17px] top-1/2 h-px w-[17px] bg-[#78a58a]" />
-              <div className="absolute left-1/2 top-[-17px] h-[17px] w-px bg-[#78a58a]" />
-              <div className="absolute bottom-[-17px] left-1/2 h-[17px] w-px bg-[#78a58a]" />
-
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#176b4b] text-white shadow-md shadow-[#176b4b]/15">
-                <CircuitBoard className="h-7 w-7" />
-              </div>
-
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#d39a5d]" />
-              <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-[#78a58a]" />
-            </div>
-
-            <h2 className="mt-7 text-base font-semibold text-[#354239]">
-              No circuits yet
-            </h2>
-
-            <p className="mt-2 max-w-sm text-sm leading-6 text-[#89948d]">
-              Your electronic designs will appear here.
+        <div className="flex flex-wrap items-end justify-between gap-5 border-b border-[#dfe5e1] pb-7">
+          <div>
+            <p className="mb-2 text-xs font-medium text-[#829087]">
+              Personal workspace
             </p>
 
-            <div className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#dfe5e1] bg-[#f7f9f7] px-4 py-2.5 text-xs font-medium text-[#718078]">
-              <Plus className="h-4 w-4" />
-              Project creation coming soon
-            </div>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              My circuits
+            </h1>
+
+            <p className="mt-2 text-sm text-[#7f8c83]">
+              Your electronic circuit designs.
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleCreateCircuit}
+            disabled={creating}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176b4b] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#12583d] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {creating ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            {creating ? 'Creating...' : 'New circuit'}
+          </button>
         </div>
 
         {error && (
@@ -131,6 +177,71 @@ export function PersonalPage() {
           >
             {error}
           </p>
+        )}
+
+        {loading ? (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-40 animate-pulse rounded-xl border border-[#dfe5e1] bg-white"
+              />
+            ))}
+          </div>
+        ) : circuits.length === 0 ? (
+          <div className="mt-8 flex min-h-[340px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#cbd7ce] bg-white px-6 py-12 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-[#dce8df] bg-[#f0f5f1]">
+              <CircuitBoard className="h-9 w-9 text-[#176b4b]" />
+            </div>
+
+            <h2 className="mt-7 text-base font-semibold text-[#354239]">
+              No circuits yet
+            </h2>
+
+            <p className="mt-2 max-w-sm text-sm leading-6 text-[#89948d]">
+              Create your first circuit and start designing.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleCreateCircuit}
+              disabled={creating}
+              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#176b4b] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#12583d] disabled:opacity-60"
+            >
+              <Plus className="h-4 w-4" />
+              Create your first circuit
+            </button>
+          </div>
+        ) : (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {circuits.map((circuit) => (
+              <button
+                key={circuit.id}
+                type="button"
+                onClick={() => navigate(`/editor/${circuit.id}`)}
+                className="group flex min-h-40 flex-col rounded-xl border border-[#dfe5e1] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#9db9a7] hover:shadow-md"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf4ef] text-[#176b4b] transition group-hover:bg-[#176b4b] group-hover:text-white">
+                    <CircuitBoard className="h-5 w-5" />
+                  </div>
+
+                  <span className="rounded-md bg-[#f3f6f3] px-2 py-1 text-[10px] font-medium text-[#829087]">
+                    Circuit
+                  </span>
+                </div>
+
+                <h2 className="mt-5 truncate text-sm font-semibold text-[#354239]">
+                  {circuit.name}
+                </h2>
+
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-[#89948d]">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  Updated {formatDate(circuit.updatedAt)}
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </section>
     </main>
