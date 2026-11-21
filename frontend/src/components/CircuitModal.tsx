@@ -1,10 +1,9 @@
 
-import { Formik, Form, Field } from 'formik'
-import { X, AlertTriangle, Pencil } from 'lucide-react'
+import { Field, Form, Formik } from 'formik'
+import { AlertTriangle, Pencil } from 'lucide-react'
 
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-
 import {
   Dialog,
   DialogContent,
@@ -26,17 +25,19 @@ interface BaseProps {
   loading: boolean
   error: string
   onClose: () => void
-  onConfirmDelete: () => void
 }
 
-type CircuitModalProps =
-  | (BaseProps & {
-      mode: 'rename'
-      onRename: (name: string) => void
-    })
-  | (BaseProps & {
-      mode: 'delete'
-    })
+type CircuitModalProps = BaseProps &
+  (
+    | {
+        mode: 'rename'
+        onRename: (name: string) => Promise<void>
+      }
+    | {
+        mode: 'delete'
+        onConfirmDelete: () => Promise<void>
+      }
+  )
 
 function validateName(values: CircuitNameValues) {
   const result = circuitNameSchema.safeParse(values)
@@ -45,9 +46,7 @@ function validateName(values: CircuitNameValues) {
 
   return result.error.issues.reduce<Record<string, string>>(
     (errors, issue) => {
-      const field = issue.path[0]
-
-      if (field === 'name') {
+      if (issue.path[0] === 'name') {
         errors.name = issue.message
       }
 
@@ -64,10 +63,12 @@ export function CircuitModal(props: CircuitModalProps) {
     <Dialog
       open={props.open}
       onOpenChange={(open) => {
-        if (!open && !props.loading) props.onClose()
+        if (!open && !props.loading) {
+          props.onClose()
+        }
       }}
     >
-      <DialogContent className="max-w-md border-[#dfe5e1] bg-white p-6">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-md border-[#dfe5e1] bg-white p-6">
         <DialogHeader>
           <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf4ef] text-[#176b4b]">
             {isRename ? (
@@ -88,13 +89,17 @@ export function CircuitModal(props: CircuitModalProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {isRename ? (
+        {props.mode === 'rename' ? (
           <Formik<CircuitNameValues>
             initialValues={{ name: props.circuit.name }}
+            enableReinitialize
             validate={validateName}
-            onSubmit={(values) => {
-              const name = circuitNameSchema.parse(values).name
-              props.onRename(name)
+            onSubmit={async (values) => {
+              const result = circuitNameSchema.safeParse(values)
+
+              if (result.success) {
+                await props.onRename(result.data.name)
+              }
             }}
           >
             {({ errors, touched, isSubmitting }) => (
@@ -107,19 +112,16 @@ export function CircuitModal(props: CircuitModalProps) {
                     Circuit name
                   </label>
 
-                  <Field name="name">
-                    {({ field }: { field: React.InputHTMLAttributes<HTMLInputElement> }) => (
-                      <Input
-                        {...field}
-                        id="circuit-name"
-                        placeholder="Enter circuit name"
-                        maxLength={60}
-                        autoFocus
-                        disabled={props.loading}
-                        className="h-10 border-[#dfe5e1] bg-[#f8faf9] focus-visible:border-[#176b4b] focus-visible:ring-[#176b4b]/20"
-                      />
-                    )}
-                  </Field>
+                  <Field
+                    as={Input}
+                    id="circuit-name"
+                    name="name"
+                    placeholder="Enter circuit name"
+                    maxLength={60}
+                    autoFocus
+                    disabled={props.loading}
+                    className="h-10 border-[#dfe5e1] bg-[#f8faf9] focus-visible:border-[#176b4b] focus-visible:ring-[#176b4b]/20"
+                  />
 
                   {touched.name && errors.name && (
                     <p className="text-xs text-red-600">
@@ -149,7 +151,9 @@ export function CircuitModal(props: CircuitModalProps) {
                     disabled={props.loading || isSubmitting}
                     className="bg-[#176b4b] text-white hover:bg-[#12583d]"
                   >
-                    {props.loading ? 'Saving...' : 'Save changes'}
+                    {props.loading || isSubmitting
+                      ? 'Saving...'
+                      : 'Save changes'}
                   </Button>
                 </div>
               </Form>
@@ -174,6 +178,7 @@ export function CircuitModal(props: CircuitModalProps) {
 
             <div className="flex justify-end gap-2">
               <Button
+                type="button"
                 variant="outline"
                 onClick={props.onClose}
                 disabled={props.loading}
@@ -182,6 +187,7 @@ export function CircuitModal(props: CircuitModalProps) {
               </Button>
 
               <Button
+                type="button"
                 variant="destructive"
                 onClick={props.onConfirmDelete}
                 disabled={props.loading}

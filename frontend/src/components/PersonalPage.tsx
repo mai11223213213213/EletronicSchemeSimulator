@@ -18,7 +18,8 @@ import {
   deleteCircuit,
   type Circuit,
 } from "../api/circuits";
-
+import { CircuitModal } from "./CircuitModal";
+import { Skeleton } from "./ui/skeleton";
 export function PersonalPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -31,7 +32,6 @@ export function PersonalPage() {
   const [renameTarget, setRenameTarget] = useState<Circuit | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Circuit | null>(null);
 
-  const [renameValue, setRenameValue] = useState("");
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState("");
 
@@ -76,16 +76,75 @@ export function PersonalPage() {
     }
   }
 
-function openRenameModal(circuit: Circuit) {
-  setRenameTarget(circuit)
-  setRenameValue(circuit.name)
-  setModalError('')
-}
+  function openRenameModal(circuit: Circuit) {
+    setDeleteTarget(null);
+    setRenameTarget(circuit);
+    setModalError("");
+  }
 
-function openDeleteModal(circuit: Circuit) {
-  setDeleteTarget(circuit)
-  setModalError('')
-}
+  function openDeleteModal(circuit: Circuit) {
+    setRenameTarget(null);
+    setDeleteTarget(circuit);
+    setModalError("");
+  }
+
+  function closeModal() {
+    if (modalLoading) return;
+
+    setRenameTarget(null);
+    setDeleteTarget(null);
+    setModalError("");
+  }
+
+  async function submitRename(name: string) {
+    if (!renameTarget) return;
+
+    setModalLoading(true);
+    setModalError("");
+
+    try {
+      const updatedCircuit = await updateCircuit(renameTarget.id, {
+        name,
+      });
+
+      setCircuits((current) =>
+        current.map((circuit) =>
+          circuit.id === updatedCircuit.id ? updatedCircuit : circuit,
+        ),
+      );
+
+      setRenameTarget(null);
+    } catch (err) {
+      setModalError(
+        err instanceof Error ? err.message : "Unable to rename this circuit.",
+      );
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+
+    setModalLoading(true);
+    setModalError("");
+
+    try {
+      await deleteCircuit(deleteTarget.id);
+
+      setCircuits((current) =>
+        current.filter((circuit) => circuit.id !== deleteTarget.id),
+      );
+
+      setDeleteTarget(null);
+    } catch (err) {
+      setModalError(
+        err instanceof Error ? err.message : "Unable to delete this circuit.",
+      );
+    } finally {
+      setModalLoading(false);
+    }
+  }
 
   async function handleLogout() {
     setError("");
@@ -198,8 +257,19 @@ function openDeleteModal(circuit: Circuit) {
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-40 animate-pulse rounded-xl border border-[#dfe5e1] bg-white"
-              />
+                className="rounded-xl border border-[#dfe5e1] bg-white p-5"
+              >
+                <div className="flex items-start justify-between">
+                  <Skeleton className="h-11 w-11 rounded-xl" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                  </div>
+                </div>
+
+                <Skeleton className="mt-5 h-4 w-2/3" />
+                <Skeleton className="mt-3 h-3 w-1/3" />
+              </div>
             ))}
           </div>
         ) : circuits.length === 0 ? (
@@ -276,6 +346,29 @@ function openDeleteModal(circuit: Circuit) {
           </div>
         )}
       </section>
+            {renameTarget && (
+        <CircuitModal
+          mode="rename"
+          circuit={renameTarget}
+          open={true}
+          loading={modalLoading}
+          error={modalError}
+          onClose={closeModal}
+          onRename={submitRename}
+        />
+      )}
+
+      {deleteTarget && (
+        <CircuitModal
+          mode="delete"
+          circuit={deleteTarget}
+          open={true}
+          loading={modalLoading}
+          error={modalError}
+          onClose={closeModal}
+          onConfirmDelete={confirmDelete}
+        />
+      )}
     </main>
   );
 }
