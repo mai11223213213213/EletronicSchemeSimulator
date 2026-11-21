@@ -117,7 +117,7 @@ export function CircuitWorkspace({
       <Canvas />
 
       {sidebarOpen ? (
-        <div className="absolute bottom-2 left-2 top-2 z-20 w-64 max-[899px]:w-52">
+        <div className="absolute bottom-2 left-2 top-2 z-20 w-64 max-[899px]:bottom-16 max-[899px]:left-2 max-[899px]:top-14 max-[899px]:w-[min(14rem,calc(100vw-1rem))]">
           <Sidebar onClose={() => setSidebarOpen(false)} />
         </div>
       ) : (
@@ -126,7 +126,7 @@ export function CircuitWorkspace({
           onClick={openSidebar}
           title="Show components"
           aria-label="Show components"
-          className="absolute left-2 top-2 z-20 inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur hover:bg-white"
+          className="absolute left-2 top-2 z-20 inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur hover:bg-white max-[899px]:top-3 max-[899px]:px-2.5 max-[899px]:py-2"
         >
           <PanelTopOpen className="h-4 w-4" />
           Components
@@ -134,11 +134,12 @@ export function CircuitWorkspace({
       )}
 
       {/* Main toolbar */}
-      <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 max-[899px]:bottom-4 max-[899px]:top-auto">
+      <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 max-[899px]:bottom-3 max-[899px]:left-1/2 max-[899px]:top-auto max-[899px]:w-[calc(100%-1rem)] max-[899px]:justify-center max-[899px]:gap-1">
+        {" "}
         <button
           type="button"
           onClick={running ? stop : startSimulation}
-          className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white shadow-lg ${
+          className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white shadow-lg max-[899px]:px-2 max-[899px]:py-2 max-[899px]:text-xs ${
             running
               ? "bg-red-600 hover:bg-red-700"
               : "bg-emerald-600 hover:bg-emerald-700"
@@ -151,9 +152,7 @@ export function CircuitWorkspace({
           )}
           {running ? "Stop simulation" : "Start simulation"}
         </button>
-
         <ModelSwitch />
-
         {/* Settings menu */}
         <div className="relative">
           <button
@@ -233,10 +232,10 @@ export function CircuitWorkspace({
       </div>
 
       {/* Right panels */}
-      <div className="pointer-events-none absolute bottom-16 right-4 top-14 z-20 flex w-72 flex-col gap-2 max-[899px]:w-56">
+      <div className="pointer-events-none absolute bottom-16 right-4 top-14 z-20 flex w-72 flex-col gap-2 max-[899px]:bottom-16 max-[899px]:left-2 max-[899px]:right-2 max-[899px]:top-auto max-[899px]:max-h-[42%] max-[899px]:w-auto">
+        {" "}
         <PropertiesPanel />
         <WirePanel />
-
         {readoutVisible && (
           <div className="pointer-events-auto min-h-0 flex-1">
             <SimulationConsole />
@@ -250,7 +249,7 @@ export function CircuitWorkspace({
           onClick={openReadout}
           title="Show readout"
           aria-label="Show readout"
-          className="absolute right-14 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur hover:bg-white"
+          className="absolute right-14 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur hover:bg-white max-[899px]:right-2 max-[899px]:top-3 max-[899px]:px-2.5 max-[899px]:py-2"
         >
           <Activity className="h-4 w-4" />
           Readout

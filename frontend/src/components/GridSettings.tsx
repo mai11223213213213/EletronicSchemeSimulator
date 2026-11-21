@@ -17,7 +17,7 @@ interface Props {
 export function GridSettings({ cellPx, visible, onCellPx, onVisible, onResetView }: Props) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="absolute bottom-4 right-4 z-30 flex items-end gap-2" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute bottom-4 right-4 z-30 flex items-end gap-2 max-[899px]:bottom-[4.5rem] max-[899px]:right-2" onClick={(e) => e.stopPropagation()}>
       {open && (
         <div className="w-64 rounded-md border border-gray-200 bg-white/95 p-4 shadow-xl backdrop-blur">
           <div className="mb-4 flex items-center justify-between">
@@ -50,7 +50,7 @@ export function GridSettings({ cellPx, visible, onCellPx, onVisible, onResetView
       )}
       <button
         type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} title="Grid settings"
-        className="flex shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur transition hover:bg-white"
+        className="flex shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur transition hover:bg-white max-[899px]:px-2.5 max-[899px]:py-2"
       >
         <Settings2 className="h-4 w-4 text-gray-900" />
         <span>Grid</span>
