@@ -41,7 +41,13 @@ export function CircuitWorkspace({
   const [sidebarOpen, setSidebarOpen] = useState(() => !isNarrow());
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const [name, setName] = useState(circuitName);
+  const [nameDraft, setNameDraft] = useState({
+    sourceName: circuitName,
+    value: circuitName,
+  });
+  const name =
+    nameDraft.sourceName === circuitName ? nameDraft.value : circuitName;
+
   const [renameError, setRenameError] = useState("");
   const [renaming, setRenaming] = useState(false);
 
@@ -83,6 +89,7 @@ export function CircuitWorkspace({
     }
 
     if (trimmedName === circuitName) {
+      setNameDraft({ sourceName: circuitName, value: circuitName });
       setRenameError("");
       return;
     }
@@ -92,7 +99,7 @@ export function CircuitWorkspace({
 
     try {
       await onRename(trimmedName);
-      setName(trimmedName);
+      setNameDraft({ sourceName: trimmedName, value: trimmedName });
       setRenameError("");
     } catch (error) {
       setRenameError(
@@ -147,7 +154,7 @@ export function CircuitWorkspace({
 
         <ModelSwitch />
 
-        {/* Settings */}
+        {/* Settings menu */}
         <div className="relative">
           <button
             type="button"
@@ -177,16 +184,18 @@ export function CircuitWorkspace({
                 </label>
 
                 <input
-                  key={circuitName}
                   id="circuit-name"
                   type="text"
                   value={name}
                   onChange={(event) => {
-                    setName(event.target.value);
+                    setNameDraft({
+                      sourceName: circuitName,
+                      value: event.target.value,
+                    });
                     setRenameError("");
                   }}
                   maxLength={60}
-                  disabled={renaming}
+                  disabled={renaming || exiting}
                   placeholder="Enter circuit name"
                   className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 disabled:opacity-60"
                 />
@@ -199,29 +208,29 @@ export function CircuitWorkspace({
 
                 <button
                   type="submit"
-                  disabled={renaming || !name.trim()}
+                  disabled={renaming || exiting || !name.trim()}
                   className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Save className="h-4 w-4" />
                   {renaming ? "Saving..." : "Save name"}
                 </button>
               </form>
+
+              <div className="my-3 border-t border-gray-200" />
+
+              <button
+                type="button"
+                onClick={onExit}
+                disabled={exiting || renaming}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-50"
+              >
+                <LogOut className="h-4 w-4" />
+                {exiting ? "Saving and leaving..." : "Back to dashboard"}
+              </button>
             </div>
           )}
         </div>
       </div>
-
-      {/* Exit button — icon only */}
-      <button
-        type="button"
-        onClick={onExit}
-        disabled={exiting}
-        title="Back to dashboard"
-        aria-label="Back to dashboard"
-        className="absolute right-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-md text-red-500 transition hover:bg-red-500/10 hover:text-red-600 disabled:cursor-wait disabled:opacity-50"
-      >
-        <LogOut className="h-5 w-5" />
-      </button>
 
       {/* Right panels */}
       <div className="pointer-events-none absolute bottom-16 right-4 top-14 z-20 flex w-72 flex-col gap-2 max-[899px]:w-56">
