@@ -5,24 +5,26 @@ import { getCircuit, updateCircuit } from "../api/circuits";
 import { useCircuitStore } from "../store/circuitStore";
 import { CircuitWorkspace } from "./CircuitWorkspace";
 import { WorkspaceSkeleton } from "./WorkspaceSkeleton";
+
 type SaveStatus = "saved" | "saving" | "error";
+
 export function CircuitEditorPage() {
   const { id } = useParams<{ id: string }>();
 
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [error, setError] = useState("");
-
-  const skipSave = useRef(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
 
+  const skipSave = useRef(false);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveVersion = useRef(0);
+
   const elements = useCircuitStore((state) => state.elements);
   const wires = useCircuitStore((state) => state.wires);
   const junctions = useCircuitStore((state) => state.junctions);
   const loadCircuit = useCircuitStore((state) => state.loadCircuit);
 
-  // Завантажуємо схему з сервера
+  // Load circuit
   useEffect(() => {
     if (!id) return;
 
@@ -31,10 +33,11 @@ export function CircuitEditorPage() {
     getCircuit(id)
       .then(({ data }) => {
         if (!active) return;
-        setSaveStatus("saved");
+
         skipSave.current = true;
         loadCircuit(data);
         setLoadedId(id);
+        setSaveStatus("saved");
         setError("");
       })
       .catch((err) => {
@@ -50,13 +53,13 @@ export function CircuitEditorPage() {
     };
   }, [id, loadCircuit]);
 
-  // Автоматично зберігаємо зміни
+  // Autosave circuit changes
   useEffect(() => {
     const version = ++saveVersion.current;
 
     if (!id || loadedId !== id) return;
 
-    // Не зберігаємо дані одразу після завантаження
+    // Do not save immediately after loading
     if (skipSave.current) {
       skipSave.current = false;
       return;
@@ -71,10 +74,12 @@ export function CircuitEditorPage() {
         junctions,
       };
 
-      // Запити виконуються послідовно
+      // Keep requests in order to prevent older data overwriting newer data
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
-        .then(() => updateCircuit(id, { data }))
+        .then(async () => {
+          await updateCircuit(id, { data });
+        })
         .then(() => {
           if (version !== saveVersion.current) return;
 
@@ -110,35 +115,29 @@ export function CircuitEditorPage() {
   if (loadedId !== id) {
     return <WorkspaceSkeleton />;
   }
-  <div
-    role="status"
-    className={`fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-lg border px-4 py-2 text-xs font-medium shadow-lg ${
-      saveStatus === "error"
-        ? "border-red-500/30 bg-red-950/90 text-red-300"
-        : saveStatus === "saving"
-          ? "border-amber-500/30 bg-[#19211f]/95 text-amber-300"
-          : "border-emerald-500/30 bg-[#19211f]/95 text-emerald-300"
-    }`}
-  >
-    {saveStatus === "saving"
-      ? "Saving..."
-      : saveStatus === "error"
-        ? "Save failed"
-        : "All changes saved"}
-  </div>;
 
   return (
     <>
       <CircuitWorkspace />
 
-      {error && (
-        <div
-          role="alert"
-          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white shadow-lg"
-        >
-          {error}
-        </div>
-      )}
+      {/* Save status */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={`fixed bottom-1 left-1/2 z-40 -translate-x-1/2 text-xs font-medium ${
+  saveStatus === 'error'
+    ? 'text-red-400'
+    : saveStatus === 'saving'
+      ? 'text-amber-400'
+      : 'text-emerald-400'
+}`}
+      >
+        {saveStatus === "saving"
+          ? "Saving..."
+          : saveStatus === "error"
+            ? "Save failed"
+            : "All changes saved"}
+      </div>
     </>
   );
 }
