@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import type { ComponentType } from "../model/types";
+
 import {
   useConsoleVisible,
   useHasReadout,
@@ -41,10 +43,15 @@ export function CircuitWorkspace({
   const [sidebarOpen, setSidebarOpen] = useState(() => !isNarrow());
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // The component selected in the sidebar and waiting to be placed.
+  const [selectedComponent, setSelectedComponent] =
+    useState<ComponentType | null>(null);
+
   const [nameDraft, setNameDraft] = useState({
     sourceName: circuitName,
     value: circuitName,
   });
+
   const name =
     nameDraft.sourceName === circuitName ? nameDraft.value : circuitName;
 
@@ -60,17 +67,39 @@ export function CircuitWorkspace({
 
   const openSidebar = () => {
     setSidebarOpen(true);
-    if (isNarrow()) setConsoleOpen(false);
+
+    if (isNarrow()) {
+      setConsoleOpen(false);
+    }
   };
 
   const openReadout = () => {
     setConsoleOpen(true);
-    if (isNarrow()) setSidebarOpen(false);
+
+    if (isNarrow()) {
+      setSidebarOpen(false);
+    }
   };
 
   const startSimulation = () => {
     start();
-    if (isNarrow()) setSidebarOpen(false);
+
+    if (isNarrow()) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const handleComponentSelect = (type: ComponentType) => {
+    setSelectedComponent((current) => (current === type ? null : type));
+
+    // On phones, close the palette so the canvas becomes accessible.
+    if (isNarrow()) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const handleComponentPlaced = () => {
+    setSelectedComponent(null);
   };
 
   async function handleRename(event: React.FormEvent<HTMLFormElement>) {
@@ -114,11 +143,18 @@ export function CircuitWorkspace({
 
   return (
     <main className="relative flex h-full min-h-0 w-full overflow-hidden">
-      <Canvas />
+      <Canvas
+        selectedComponent={selectedComponent}
+        onComponentPlaced={handleComponentPlaced}
+      />
 
       {sidebarOpen ? (
         <div className="absolute bottom-2 left-2 top-2 z-20 w-64 max-[899px]:bottom-16 max-[899px]:left-2 max-[899px]:top-14 max-[899px]:w-[min(14rem,calc(100vw-1rem))]">
-          <Sidebar onClose={() => setSidebarOpen(false)} />
+          <Sidebar
+            onClose={() => setSidebarOpen(false)}
+            onSelect={handleComponentSelect}
+            selectedType={selectedComponent}
+          />
         </div>
       ) : (
         <button
@@ -135,11 +171,12 @@ export function CircuitWorkspace({
 
       {/* Main toolbar */}
       <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 max-[899px]:bottom-3 max-[899px]:left-1/2 max-[899px]:top-auto max-[899px]:w-[calc(100%-1rem)] max-[899px]:justify-center max-[899px]:gap-1">
-        {" "}
         <button
           type="button"
+          title={running ? "Stop simulation" : "Start simulation"}
+          aria-label={running ? "Stop simulation" : "Start simulation"}
           onClick={running ? stop : startSimulation}
-          className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white shadow-lg max-[899px]:px-2 max-[899px]:py-2 max-[899px]:text-xs ${
+          className={`inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white shadow-lg max-[899px]:h-9 max-[899px]:w-9 max-[899px]:px-0 max-[899px]:py-0 ${
             running
               ? "bg-red-600 hover:bg-red-700"
               : "bg-emerald-600 hover:bg-emerald-700"
@@ -150,9 +187,13 @@ export function CircuitWorkspace({
           ) : (
             <Play className="h-4 w-4" />
           )}
-          {running ? "Stop simulation" : "Start simulation"}
+          <span className="max-[899px]:hidden">
+            {running ? "Stop simulation" : "Start simulation"}
+          </span>
         </button>
+
         <ModelSwitch />
+
         {/* Settings menu */}
         <div className="relative">
           <button
@@ -233,9 +274,9 @@ export function CircuitWorkspace({
 
       {/* Right panels */}
       <div className="pointer-events-none absolute bottom-16 right-4 top-14 z-20 flex w-72 flex-col gap-2 max-[899px]:bottom-16 max-[899px]:left-2 max-[899px]:right-2 max-[899px]:top-auto max-[899px]:max-h-[42%] max-[899px]:w-auto">
-        {" "}
         <PropertiesPanel />
         <WirePanel />
+
         {readoutVisible && (
           <div className="pointer-events-auto min-h-0 flex-1">
             <SimulationConsole />
