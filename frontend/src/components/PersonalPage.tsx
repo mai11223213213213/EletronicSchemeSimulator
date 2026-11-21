@@ -7,12 +7,16 @@ import {
   Plus,
   Clock3,
   LoaderCircle,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 
 import { useAuth } from '../auth/AuthContext'
 import {
   createCircuit,
   getCircuits,
+  updateCircuit,
+  deleteCircuit,
   type Circuit,
 } from '../api/circuits'
 
@@ -35,11 +39,7 @@ export function PersonalPage() {
       })
       .catch((err) => {
         if (active) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : 'Unable to load your circuits.',
-          )
+          setError(err instanceof Error ? err.message : 'Unable to load your circuits.')
         }
       })
       .finally(() => {
@@ -59,13 +59,42 @@ export function PersonalPage() {
       const circuit = await createCircuit()
       navigate(`/editor/${circuit.id}`)
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to create a circuit.',
-      )
+      setError(err instanceof Error ? err.message : 'Unable to create a circuit.')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleRename(circuit: Circuit) {
+    const newName = window.prompt('Enter a new circuit name:', circuit.name)?.trim()
+
+    if (!newName || newName === circuit.name) return
+
+    try {
+      const updated = await updateCircuit(circuit.id, { name: newName })
+
+      setCircuits((current) =>
+        current.map((item) => item.id === circuit.id ? updated : item),
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to rename this circuit.')
+    }
+  }
+
+  async function handleDelete(circuit: Circuit) {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${circuit.name}"? This action cannot be undone.`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      await deleteCircuit(circuit.id)
+      setCircuits((current) =>
+        current.filter((item) => item.id !== circuit.id),
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to delete this circuit.')
     }
   }
 
@@ -76,11 +105,7 @@ export function PersonalPage() {
     try {
       await logout()
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to sign out. Please try again.',
-      )
+      setError(err instanceof Error ? err.message : 'Unable to sign out. Please try again.')
     } finally {
       setIsLoggingOut(false)
     }
@@ -104,7 +129,6 @@ export function PersonalPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#176b4b] text-white">
               <CircuitBoard className="h-5 w-5" />
             </div>
-
             <p className="text-sm font-bold tracking-tight">
               Electronic Scheme Simulator
             </p>
@@ -115,7 +139,6 @@ export function PersonalPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e5eee8] text-xs font-bold text-[#176b4b]">
                 {initials}
               </div>
-
               <span className="hidden max-w-[190px] truncate text-xs font-medium text-[#536159] sm:inline">
                 {user?.email}
               </span>
@@ -128,7 +151,7 @@ export function PersonalPage() {
               onClick={handleLogout}
               disabled={isLoggingOut}
               title="Sign out"
-              className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[#65736a] transition hover:bg-[#f0f4f1] hover:text-[#176b4b] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[#65736a] transition hover:bg-[#f0f4f1] hover:text-[#176b4b] disabled:opacity-50"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden md:inline">
@@ -145,11 +168,7 @@ export function PersonalPage() {
             <p className="mb-2 text-xs font-medium text-[#829087]">
               Personal workspace
             </p>
-
-            <h1 className="text-3xl font-semibold tracking-tight">
-              My circuits
-            </h1>
-
+            <h1 className="text-3xl font-semibold tracking-tight">My circuits</h1>
             <p className="mt-2 text-sm text-[#7f8c83]">
               Your electronic circuit designs.
             </p>
@@ -159,7 +178,7 @@ export function PersonalPage() {
             type="button"
             onClick={handleCreateCircuit}
             disabled={creating}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176b4b] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#12583d] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176b4b] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#12583d] disabled:opacity-60"
           >
             {creating ? (
               <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -171,10 +190,7 @@ export function PersonalPage() {
         </div>
 
         {error && (
-          <p
-            role="alert"
-            className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
-          >
+          <p role="alert" className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
             {error}
           </p>
         )}
@@ -182,10 +198,7 @@ export function PersonalPage() {
         {loading ? (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-40 animate-pulse rounded-xl border border-[#dfe5e1] bg-white"
-              />
+              <div key={index} className="h-40 animate-pulse rounded-xl border border-[#dfe5e1] bg-white" />
             ))}
           </div>
         ) : circuits.length === 0 ? (
@@ -193,15 +206,10 @@ export function PersonalPage() {
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-[#dce8df] bg-[#f0f5f1]">
               <CircuitBoard className="h-9 w-9 text-[#176b4b]" />
             </div>
-
-            <h2 className="mt-7 text-base font-semibold text-[#354239]">
-              No circuits yet
-            </h2>
-
+            <h2 className="mt-7 text-base font-semibold text-[#354239]">No circuits yet</h2>
             <p className="mt-2 max-w-sm text-sm leading-6 text-[#89948d]">
               Create your first circuit and start designing.
             </p>
-
             <button
               type="button"
               onClick={handleCreateCircuit}
@@ -215,31 +223,52 @@ export function PersonalPage() {
         ) : (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {circuits.map((circuit) => (
-              <button
+              <article
                 key={circuit.id}
-                type="button"
-                onClick={() => navigate(`/editor/${circuit.id}`)}
-                className="group flex min-h-40 flex-col rounded-xl border border-[#dfe5e1] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#9db9a7] hover:shadow-md"
+                className="group flex min-h-40 flex-col rounded-xl border border-[#dfe5e1] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#9db9a7] hover:shadow-md"
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf4ef] text-[#176b4b] transition group-hover:bg-[#176b4b] group-hover:text-white">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf4ef] text-[#176b4b]">
                     <CircuitBoard className="h-5 w-5" />
                   </div>
 
-                  <span className="rounded-md bg-[#f3f6f3] px-2 py-1 text-[10px] font-medium text-[#829087]">
-                    Circuit
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleRename(circuit)}
+                      title="Rename circuit"
+                      aria-label={`Rename ${circuit.name}`}
+                      className="rounded-md p-2 text-[#829087] transition hover:bg-[#edf4ef] hover:text-[#176b4b]"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(circuit)}
+                      title="Delete circuit"
+                      aria-label={`Delete ${circuit.name}`}
+                      className="rounded-md p-2 text-[#a0aaa3] transition hover:bg-rose-50 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
-                <h2 className="mt-5 truncate text-sm font-semibold text-[#354239]">
-                  {circuit.name}
-                </h2>
-
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-[#89948d]">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  Updated {formatDate(circuit.updatedAt)}
-                </div>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/editor/${circuit.id}`)}
+                  className="mt-5 text-left"
+                >
+                  <h2 className="truncate text-sm font-semibold text-[#354239] group-hover:text-[#176b4b]">
+                    {circuit.name}
+                  </h2>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-[#89948d]">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    Updated {formatDate(circuit.updatedAt)}
+                  </div>
+                </button>
+              </article>
             ))}
           </div>
         )}
