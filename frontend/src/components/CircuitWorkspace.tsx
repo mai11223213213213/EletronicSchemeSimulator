@@ -142,7 +142,7 @@ export function CircuitWorkspace({
   }
 
   return (
-    <main className="relative flex h-full min-h-0 w-full overflow-hidden">
+    <main className="relative flex h-full min-h-0 w-full overflow-hidden overscroll-none">
       <Canvas
         selectedComponent={selectedComponent}
         onComponentPlaced={handleComponentPlaced}

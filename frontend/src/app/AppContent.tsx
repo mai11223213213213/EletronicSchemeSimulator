@@ -30,7 +30,7 @@ function GuestRoute() {
 
 function EditorPage() {
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#101716]">
+    <div className="h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#101716]">
       <CircuitWorkspace />
     </div>
   );
@@ -57,7 +57,7 @@ export function AppContent() {
         <Route
           path="/editor/:id"
           element={
-            <div className="h-screen w-screen overflow-hidden bg-[#101716]">
+            <div className="h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#101716]">
               <CircuitEditorPage />
             </div>
           }
