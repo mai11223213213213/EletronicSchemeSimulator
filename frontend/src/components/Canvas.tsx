@@ -51,6 +51,7 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
   const cancelWire = useCircuitStore((s) => s.cancelWire);
   const toggleSwitch = useCircuitStore((s) => s.toggleSwitch);
   const moveBend = useCircuitStore((s) => s.moveBend);
+  const setWireBends = useCircuitStore((s) => s.setWireBends);
   const insertBend = useCircuitStore((s) => s.insertBend);
   const removeBend = useCircuitStore((s) => s.removeBend);
   const pruneDeadBends = useCircuitStore((s) => s.pruneDeadBends);
@@ -80,8 +81,6 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
     panY: number;
     active: boolean;
   } | null>(null);
-
- 
 
   useKeyboardShortcuts();
 
@@ -185,6 +184,118 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
 
     if (draft) finishWire(ep);
     else startWire(ep);
+  };
+
+  // ---- dragging a whole wire segment ---------------------------------------
+
+  const segmentDrag = useRef<{
+    wireId: string;
+    segment: number;
+    points: Point[];
+    start: Point;
+    normal: Point;
+    moved: boolean;
+  } | null>(null);
+
+  const onSegmentPointerDown = (
+    e: ReactPointerEvent<SVGPathElement>,
+    wireId: string,
+    segment: number,
+  ) => {
+    e.stopPropagation();
+
+    const wire = wires.find((item) => item.id === wireId);
+    if (!wire) return;
+
+    const points = wirePath(wire, { elements, junctions });
+    if (!points || !points[segment] || !points[segment + 1]) return;
+
+    const a = points[segment];
+    const b = points[segment + 1];
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+
+    if (length === 0) return;
+
+    select({ kind: "wire", id: wireId });
+
+    segmentDrag.current = {
+      wireId,
+      segment,
+      points,
+      start: toWorld(e.clientX, e.clientY),
+      normal: {
+        x: -dy / length,
+        y: dx / length,
+      },
+      moved: false,
+    };
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onSegmentPointerMove = (e: ReactPointerEvent<SVGPathElement>) => {
+    const drag = segmentDrag.current;
+    if (!drag) return;
+
+    const current = toWorld(e.clientX, e.clientY);
+
+    const dx = current.x - drag.start.x;
+    const dy = current.y - drag.start.y;
+
+    const rawOffset = dx * drag.normal.x + dy * drag.normal.y;
+
+    // Ignore tiny movements so a normal tap only selects the wire.
+    if (!drag.moved && Math.hypot(dx, dy) * scale < 4) return;
+
+    if (!drag.moved) {
+      beginMove();
+      drag.moved = true;
+    }
+
+    const wire = wires.find((item) => item.id === drag.wireId);
+    if (!wire) return;
+
+    // Orthogonal wires move in grid increments.
+    const offset = wire.diagonal
+      ? Math.round(rawOffset * 100) / 100
+      : Math.round(rawOffset / GRID) * GRID;
+
+    const a = drag.points[drag.segment];
+    const b = drag.points[drag.segment + 1];
+
+    const movedA = {
+      x: a.x + drag.normal.x * offset,
+      y: a.y + drag.normal.y * offset,
+    };
+
+    const movedB = {
+      x: b.x + drag.normal.x * offset,
+      y: b.y + drag.normal.y * offset,
+    };
+
+    // Keep both endpoints fixed and insert the shifted segment
+    // between its original neighbours.
+    const nextPath = [
+      ...drag.points.slice(0, drag.segment),
+      a,
+      movedA,
+      movedB,
+      b,
+      ...drag.points.slice(drag.segment + 2),
+    ];
+
+    setWireBends(drag.wireId, nextPath.slice(1, -1));
+  };
+
+  const onSegmentPointerUp = (e: ReactPointerEvent<SVGPathElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+
+    segmentDrag.current = null;
   };
 
   // ---- editing the bends of the selected wire ------------------------------
@@ -299,170 +410,170 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
 
   const PAN_THRESHOLD = 4;
 
-const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
-  justPanned.current = false
+  const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    justPanned.current = false;
 
-  if (e.button !== 0 && e.button !== 1) return
+    if (e.button !== 0 && e.button !== 1) return;
 
-  if (e.pointerType === 'touch') {
-    touchPointers.current.set(e.pointerId, {
-      x: e.clientX,
-      y: e.clientY,
-    })
-
-    // Two fingers start pinch-to-zoom.
-    if (touchPointers.current.size === 2) {
-      const points = Array.from(touchPointers.current.values())
-      const [a, b] = points
-
-      const midpoint = {
-        x: (a.x + b.x) / 2,
-        y: (a.y + b.y) / 2,
-      }
-
-      const distance = Math.hypot(a.x - b.x, a.y - b.y)
-
-      pinch.current = {
-        startDistance: Math.max(distance, 1),
-        startCellPx: cellPx,
-        worldPoint: toWorld(midpoint.x, midpoint.y),
-      }
-
-      panDrag.current = null
-      justPanned.current = true
-      setPanning(true)
-
-      // Capture both fingers so the gesture remains active.
-      for (const pointerId of touchPointers.current.keys()) {
-        if (!e.currentTarget.hasPointerCapture(pointerId)) {
-          e.currentTarget.setPointerCapture(pointerId)
-        }
-      }
-
-      return
-    }
-  }
-
-  panDrag.current = {
-    x: e.clientX,
-    y: e.clientY,
-    panX: pan.x,
-    panY: pan.y,
-    active: false,
-  }
-}
-
- const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-  if (e.pointerType === 'touch') {
-    const pointers = touchPointers.current
-
-    if (pointers.has(e.pointerId)) {
-      pointers.set(e.pointerId, {
+    if (e.pointerType === "touch") {
+      touchPointers.current.set(e.pointerId, {
         x: e.clientX,
         y: e.clientY,
-      })
-    }
+      });
 
-    // Update zoom while two fingers are active.
-    if (pinch.current && pointers.size >= 2) {
-      const points = Array.from(pointers.values())
-      const [a, b] = points
+      // Two fingers start pinch-to-zoom.
+      if (touchPointers.current.size === 2) {
+        const points = Array.from(touchPointers.current.values());
+        const [a, b] = points;
 
-      const distance = Math.hypot(a.x - b.x, a.y - b.y)
+        const midpoint = {
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2,
+        };
 
-      const midpoint = {
-        x: (a.x + b.x) / 2,
-        y: (a.y + b.y) / 2,
-      }
+        const distance = Math.hypot(a.x - b.x, a.y - b.y);
 
-      const rect = e.currentTarget.getBoundingClientRect()
+        pinch.current = {
+          startDistance: Math.max(distance, 1),
+          startCellPx: cellPx,
+          worldPoint: toWorld(midpoint.x, midpoint.y),
+        };
 
-      const nextCellPx = Math.min(
-        MAX_CELL,
-        Math.max(
-          MIN_CELL,
-          Math.round(
-            pinch.current.startCellPx *
-              (distance / pinch.current.startDistance),
-          ),
-        ),
-      )
+        panDrag.current = null;
+        justPanned.current = true;
+        setPanning(true);
 
-      const nextScale = nextCellPx / GRID
-
-      // Keep the point between the fingers in the same world position.
-      setCellPx(nextCellPx)
-      setPan({
-        x: midpoint.x - rect.left - pinch.current.worldPoint.x * nextScale,
-        y: midpoint.y - rect.top - pinch.current.worldPoint.y * nextScale,
-      })
-
-      justPanned.current = true
-      return
-    }
-  }
-
-  const d = panDrag.current
-
-  if (d) {
-    if (
-      !d.active &&
-      Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD
-    ) {
-      d.active = true
-      justPanned.current = true
-      setPanning(true)
-      e.currentTarget.setPointerCapture(e.pointerId)
-    }
-
-    if (d.active) {
-      setPan({
-        x: d.panX + e.clientX - d.x,
-        y: d.panY + e.clientY - d.y,
-      })
-    }
-  }
-
-  if (draft) {
-    setCursor(snapPoint(toWorld(e.clientX, e.clientY)))
-  }
-}
-
- const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
-  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-    e.currentTarget.releasePointerCapture(e.pointerId)
-  }
-
-  if (e.pointerType === 'touch') {
-    touchPointers.current.delete(e.pointerId)
-
-    if (pinch.current) {
-      pinch.current = null
-
-      // If one finger remains, allow it to continue panning.
-      const remaining = Array.from(touchPointers.current.values())[0]
-
-      if (remaining) {
-        panDrag.current = {
-          x: remaining.x,
-          y: remaining.y,
-          panX: pan.x,
-          panY: pan.y,
-          active: false,
+        // Capture both fingers so the gesture remains active.
+        for (const pointerId of touchPointers.current.keys()) {
+          if (!e.currentTarget.hasPointerCapture(pointerId)) {
+            e.currentTarget.setPointerCapture(pointerId);
+          }
         }
-      } else {
-        panDrag.current = null
+
+        return;
+      }
+    }
+
+    panDrag.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: pan.x,
+      panY: pan.y,
+      active: false,
+    };
+  };
+
+  const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === "touch") {
+      const pointers = touchPointers.current;
+
+      if (pointers.has(e.pointerId)) {
+        pointers.set(e.pointerId, {
+          x: e.clientX,
+          y: e.clientY,
+        });
       }
 
-      setPanning(false)
-      justPanned.current = true
-      return
-    }
-  }
+      // Update zoom while two fingers are active.
+      if (pinch.current && pointers.size >= 2) {
+        const points = Array.from(pointers.values());
+        const [a, b] = points;
 
-  panDrag.current = null
-  setPanning(false)
-}
+        const distance = Math.hypot(a.x - b.x, a.y - b.y);
+
+        const midpoint = {
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2,
+        };
+
+        const rect = e.currentTarget.getBoundingClientRect();
+
+        const nextCellPx = Math.min(
+          MAX_CELL,
+          Math.max(
+            MIN_CELL,
+            Math.round(
+              pinch.current.startCellPx *
+                (distance / pinch.current.startDistance),
+            ),
+          ),
+        );
+
+        const nextScale = nextCellPx / GRID;
+
+        // Keep the point between the fingers in the same world position.
+        setCellPx(nextCellPx);
+        setPan({
+          x: midpoint.x - rect.left - pinch.current.worldPoint.x * nextScale,
+          y: midpoint.y - rect.top - pinch.current.worldPoint.y * nextScale,
+        });
+
+        justPanned.current = true;
+        return;
+      }
+    }
+
+    const d = panDrag.current;
+
+    if (d) {
+      if (
+        !d.active &&
+        Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD
+      ) {
+        d.active = true;
+        justPanned.current = true;
+        setPanning(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+
+      if (d.active) {
+        setPan({
+          x: d.panX + e.clientX - d.x,
+          y: d.panY + e.clientY - d.y,
+        });
+      }
+    }
+
+    if (draft) {
+      setCursor(snapPoint(toWorld(e.clientX, e.clientY)));
+    }
+  };
+
+  const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+
+    if (e.pointerType === "touch") {
+      touchPointers.current.delete(e.pointerId);
+
+      if (pinch.current) {
+        pinch.current = null;
+
+        // If one finger remains, allow it to continue panning.
+        const remaining = Array.from(touchPointers.current.values())[0];
+
+        if (remaining) {
+          panDrag.current = {
+            x: remaining.x,
+            y: remaining.y,
+            panX: pan.x,
+            panY: pan.y,
+            active: false,
+          };
+        } else {
+          panDrag.current = null;
+        }
+
+        setPanning(false);
+        justPanned.current = true;
+        return;
+      }
+    }
+
+    panDrag.current = null;
+    setPanning(false);
+  };
 
   const onSvgWheel = (e: ReactWheelEvent<SVGSVGElement>) => {
     const dx = e.shiftKey ? e.deltaY : e.deltaX;
@@ -541,15 +652,18 @@ const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
           <WireLayer
             data={{ elements, wires, junctions }}
             selection={selection}
+            scale={scale}
             onWireClick={onWireClick}
             onWireDoubleClick={onWireDoubleClick}
             onJunctionClick={onJunctionClick}
+            onSegmentPointerDown={onSegmentPointerDown}
+            onSegmentPointerMove={onSegmentPointerMove}
+            onSegmentPointerUp={onSegmentPointerUp}
             onBendPointerDown={onBendPointerDown}
             onBendPointerMove={onBendPointerMove}
             onBendPointerUp={onBendPointerUp}
             onBendRemove={removeBend}
             activeBend={activeBend}
-            scale={scale}
           />
 
           {elements.map((el) => (
@@ -601,8 +715,8 @@ const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
           {draft
             ? "Click canvas — add bend · click pin/wire — finish · D — diagonal/straight · Esc — cancel"
             : selectedComponent
-              ? 'Tap the canvas to place the selected component'
-              : 'Click pin — new wire · Drag canvas / wheel — pan · Pinch — zoom · R — rotate · Del — delete · Ctrl+Z — undo'}
+              ? "Tap the canvas to place the selected component"
+              : "Click pin — new wire · Drag canvas / wheel — pan · Pinch — zoom · R — rotate · Del — delete · Ctrl+Z — undo"}
         </div>
       </div>
 

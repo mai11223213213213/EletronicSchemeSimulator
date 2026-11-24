@@ -19,6 +19,14 @@ interface Props {
   onWireDoubleClick: (e: ReactMouseEvent, wireId: string) => void;
   onJunctionClick: (e: ReactMouseEvent, junctionId: string) => void;
 
+  onSegmentPointerDown: (
+    e: ReactPointerEvent<SVGPathElement>,
+    wireId: string,
+    segment: number,
+  ) => void;
+  onSegmentPointerMove: (e: ReactPointerEvent<SVGPathElement>) => void;
+  onSegmentPointerUp: (e: ReactPointerEvent<SVGPathElement>) => void;
+
   onBendPointerDown: (
     e: ReactPointerEvent<SVGCircleElement>,
     wireId: string,
@@ -39,10 +47,6 @@ interface Props {
   } | null;
 }
 
-/**
- * Draws wires, junctions and editable bend handles.
- * The visible handles stay small, while their pointer targets are larger.
- */
 export function WireLayer({
   data,
   selection,
@@ -50,6 +54,9 @@ export function WireLayer({
   onWireClick,
   onWireDoubleClick,
   onJunctionClick,
+  onSegmentPointerDown,
+  onSegmentPointerMove,
+  onSegmentPointerUp,
   onBendPointerDown,
   onBendPointerMove,
   onBendPointerUp,
@@ -69,7 +76,6 @@ export function WireLayer({
     }
   }
 
-  // Keep the touch target approximately 36px wide at every zoom level.
   const handleRadius = 18 / scale;
 
   return (
@@ -107,27 +113,43 @@ export function WireLayer({
               pointerEvents="none"
             />
 
-            {/* Invisible hit area for selecting a wire. */}
-            <path
-              d={path}
-              stroke="transparent"
-              strokeWidth={Math.max(12 / scale, 10)}
-              fill="none"
-              className="cursor-pointer"
-              onClick={(event) => onWireClick(event, wire.id)}
-              onDoubleClick={(event) =>
-                onWireDoubleClick(event, wire.id)
-              }
-            />
+            {/* Select and drag individual wire segments. */}
+            {points.slice(0, -1).map((_, index) => {
+              const segmentPath = toPathData([
+                points[index],
+                points[index + 1],
+              ]);
 
+              return (
+                <path
+                  key={`segment-${index}`}
+                  d={segmentPath}
+                  stroke="transparent"
+                  strokeWidth={Math.max(16 / scale, 10)}
+                  fill="none"
+                  className="cursor-move"
+                  style={{ touchAction: "none" }}
+                  onPointerDown={(event) =>
+                    onSegmentPointerDown(event, wire.id, index)
+                  }
+                  onPointerMove={onSegmentPointerMove}
+                  onPointerUp={onSegmentPointerUp}
+                  onPointerCancel={onSegmentPointerUp}
+                  onClick={(event) => onWireClick(event, wire.id)}
+                  onDoubleClick={(event) =>
+                    onWireDoubleClick(event, wire.id)
+                  }
+                />
+              );
+            })}
+
+            {/* Editable bend handles. */}
             {selected &&
               wire.bends.map((bend, index) => {
                 const dragging =
                   activeBend?.wireId === wire.id &&
                   activeBend.index === index;
 
-                // Do not show handles for bends that are not on the
-                // currently rendered route.
                 if (
                   !dragging &&
                   (nearestOnPath(points, bend)?.dist ?? Infinity) > 0.5
@@ -136,8 +158,7 @@ export function WireLayer({
                 }
 
                 return (
-                  <g key={index}>
-                    {/* Large invisible touch target. */}
+                  <g key={`bend-${index}`}>
                     <circle
                       cx={bend.x}
                       cy={bend.y}
@@ -160,7 +181,6 @@ export function WireLayer({
                       }}
                     />
 
-                    {/* Small visible handle — its appearance is unchanged. */}
                     <circle
                       cx={bend.x}
                       cy={bend.y}
