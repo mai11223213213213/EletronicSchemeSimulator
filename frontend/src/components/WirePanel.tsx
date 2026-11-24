@@ -1,5 +1,5 @@
 
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { useCircuitStore } from "../store/circuitStore";
 
 /**
@@ -17,6 +17,7 @@ export function WirePanel() {
   const diagonalWires = useCircuitStore((s) => s.diagonalWires);
   const setWireStyle = useCircuitStore((s) => s.setWireStyle);
   const deleteSelected = useCircuitStore((s) => s.deleteSelected);
+  const cancelWire = useCircuitStore((s) => s.cancelWire);
 
   if (!drawing && !selected) return null;
 
@@ -47,6 +48,18 @@ export function WirePanel() {
         <h3 className="text-sm font-semibold text-gray-800">
           {drawing ? "New wire" : "Wire"}
         </h3>
+
+        {drawing && (
+          <button
+            type="button"
+            onClick={cancelWire}
+            title="Cancel wire drawing"
+            aria-label="Cancel wire drawing"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-100 active:bg-gray-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
 
         {selected && (
           <button

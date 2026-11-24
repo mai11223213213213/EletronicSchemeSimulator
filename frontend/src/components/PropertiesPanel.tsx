@@ -1,21 +1,22 @@
 
 import { useState } from 'react'
-import { RotateCw, Trash2 } from 'lucide-react'
+import { RotateCw, Trash2, X } from 'lucide-react'
 import { REGISTRY } from '../model/registry'
 import { useCircuitStore } from '../store/circuitStore'
 
-/** Edit the numbers and transform the selected component. */
 export function PropertiesPanel() {
   const element = useCircuitStore((s) =>
     s.selection?.kind === 'element'
       ? s.elements.find((e) => e.id === s.selection!.id)
       : undefined,
   )
+
   const notice = useCircuitStore((s) => s.notice)
   const setProp = useCircuitStore((s) => s.setProp)
   const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
   const rotateSelected = useCircuitStore((s) => s.rotateSelected)
   const deleteSelected = useCircuitStore((s) => s.deleteSelected)
+  const select = useCircuitStore((s) => s.select)
 
   if (!element) return null
 
@@ -51,6 +52,16 @@ export function PropertiesPanel() {
             className="flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 transition hover:bg-red-50 active:bg-red-100"
           >
             <Trash2 className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => select(null)}
+            title="Deselect component"
+            aria-label="Deselect component"
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-100 active:bg-gray-200"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -141,9 +152,6 @@ export function PropertiesPanel() {
   )
 }
 
-/**
- * Keeps a local text draft while editing and commits only on blur or Enter.
- */
 function NumberField({
   value,
   min,
