@@ -212,20 +212,28 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
     }
   };
 
-  const findWireTarget = (point: Point): Endpoint | null => {
+  const findWireTarget = (
+    point: Point,
+  ):
+    | { kind: "endpoint"; endpoint: Endpoint }
+    | { kind: "wire"; wireId: string; point: Point }
+    | null => {
     const maxDistance = 22 / scale;
-    let nearest: { endpoint: Endpoint; distance: number } | null = null;
 
-    // Search component pins.
+    let nearestEndpoint: {
+      endpoint: Endpoint;
+      distance: number;
+    } | null = null;
+
     for (const element of elements) {
       for (const { pin, x, y } of elementPins(element)) {
         const distance = Math.hypot(point.x - x, point.y - y);
 
         if (
           distance <= maxDistance &&
-          (!nearest || distance < nearest.distance)
+          (!nearestEndpoint || distance < nearestEndpoint.distance)
         ) {
-          nearest = {
+          nearestEndpoint = {
             endpoint: {
               kind: "pin",
               elementId: element.id,
@@ -237,15 +245,14 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
       }
     }
 
-    // Search existing junctions.
     for (const junction of junctions) {
       const distance = Math.hypot(point.x - junction.x, point.y - junction.y);
 
       if (
         distance <= maxDistance &&
-        (!nearest || distance < nearest.distance)
+        (!nearestEndpoint || distance < nearestEndpoint.distance)
       ) {
-        nearest = {
+        nearestEndpoint = {
           endpoint: {
             kind: "junction",
             junctionId: junction.id,
@@ -255,10 +262,18 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
       }
     }
 
-    if (nearest) return nearest.endpoint;
+    if (nearestEndpoint) {
+      return {
+        kind: "endpoint",
+        endpoint: nearestEndpoint.endpoint,
+      };
+    }
 
-    // Search existing wires for a T-connection.
-    let nearestWire: { id: string; distance: number } | null = null;
+    let nearestWire: {
+      wireId: string;
+      point: Point;
+      distance: number;
+    } | null = null;
 
     for (const wire of wires) {
       const path = wirePath(wire, { elements, junctions });
@@ -272,14 +287,24 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
         (!nearestWire || hit.dist < nearestWire.distance)
       ) {
         nearestWire = {
-          id: wire.id,
+          wireId: wire.id,
+          point: hit.point,
           distance: hit.dist,
         };
       }
     }
 
+    if (nearestWire) {
+      return {
+        kind: "wire",
+        wireId: nearestWire.wireId,
+        point: nearestWire.point,
+      };
+    }
+
     return null;
   };
+
   const onPinClick = (e: ReactMouseEvent, elementId: string, pinId: string) => {
     e.stopPropagation();
 
@@ -500,18 +525,21 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
   // ---- clicking the empty canvas -------------------------------------------
 
   const onBackgroundClick = (e: ReactMouseEvent) => {
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false;
+      return;
+    }
+
     if (justPanned.current) {
       justPanned.current = false;
       return;
     }
 
-    // Drawing a wire has priority over placing a new component.
     if (draft) {
       addBend(snapPoint(toWorld(e.clientX, e.clientY)));
       return;
     }
 
-    // Touch-friendly component placement.
     if (selectedComponent) {
       const p = snapPoint(toWorld(e.clientX, e.clientY));
 
@@ -538,8 +566,14 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
         y: e.clientY,
       });
 
-      // Two fingers start pinch-to-zoom.
       if (touchPointers.current.size === 2) {
+        // Two-finger gestures cancel wire dragging and take priority.
+        if (wireDrag.current) {
+          cancelWire();
+          wireDrag.current = null;
+          suppressNextClick.current = true;
+        }
+
         const points = Array.from(touchPointers.current.values());
         const [a, b] = points;
 
@@ -560,7 +594,6 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
         justPanned.current = true;
         setPanning(true);
 
-        // Capture both fingers so the gesture remains active.
         for (const pointerId of touchPointers.current.keys()) {
           if (!e.currentTarget.hasPointerCapture(pointerId)) {
             e.currentTarget.setPointerCapture(pointerId);
@@ -569,6 +602,12 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
 
         return;
       }
+    }
+
+    // The pointer that started a wire must not start canvas panning.
+    if (wireDrag.current?.pointerId === e.pointerId) {
+      panDrag.current = null;
+      return;
     }
 
     panDrag.current = {
@@ -591,7 +630,6 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
         });
       }
 
-      // Update zoom while two fingers are active.
       if (pinch.current && pointers.size >= 2) {
         const points = Array.from(pointers.values());
         const [a, b] = points;
@@ -618,8 +656,8 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
 
         const nextScale = nextCellPx / GRID;
 
-        // Keep the point between the fingers in the same world position.
         setCellPx(nextCellPx);
+
         setPan({
           x: midpoint.x - rect.left - pinch.current.worldPoint.x * nextScale,
           y: midpoint.y - rect.top - pinch.current.worldPoint.y * nextScale,
@@ -628,6 +666,12 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
         justPanned.current = true;
         return;
       }
+    }
+
+    // Move the wire preview while dragging from a pin.
+    if (wireDrag.current?.pointerId === e.pointerId) {
+      setCursor(snapPoint(toWorld(e.clientX, e.clientY)));
+      return;
     }
 
     const d = panDrag.current;
@@ -656,41 +700,80 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
     }
   };
 
-  const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+  
+const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+  const activeWireDrag =
+    wireDrag.current?.pointerId === e.pointerId
+      ? wireDrag.current
+      : null;
+
+  if (activeWireDrag) {
+    if (e.type === "pointercancel") {
+      cancelWire();
+    } else {
+      const point = toWorld(e.clientX, e.clientY);
+      const target = findWireTarget(point);
+
+      if (
+        target?.kind === "endpoint" &&
+        !sameEndpoint(activeWireDrag.from, target.endpoint)
+      ) {
+        finishWire(target.endpoint);
+      } else if (target?.kind === "wire") {
+        finishWireOnWire(target.wireId, target.point);
+      }
+    }
+
+    wireDrag.current = null;
+    suppressNextClick.current = true;
+    panDrag.current = null;
+
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
 
     if (e.pointerType === "touch") {
       touchPointers.current.delete(e.pointerId);
-
-      if (pinch.current) {
-        pinch.current = null;
-
-        // If one finger remains, allow it to continue panning.
-        const remaining = Array.from(touchPointers.current.values())[0];
-
-        if (remaining) {
-          panDrag.current = {
-            x: remaining.x,
-            y: remaining.y,
-            panX: pan.x,
-            panY: pan.y,
-            active: false,
-          };
-        } else {
-          panDrag.current = null;
-        }
-
-        setPanning(false);
-        justPanned.current = true;
-        return;
-      }
     }
 
-    panDrag.current = null;
     setPanning(false);
-  };
+    return;
+  }
+
+  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
+  if (e.pointerType === "touch") {
+    touchPointers.current.delete(e.pointerId);
+
+    if (pinch.current) {
+      pinch.current = null;
+
+      const remaining = Array.from(touchPointers.current.values())[0];
+
+      if (remaining) {
+        panDrag.current = {
+          x: remaining.x,
+          y: remaining.y,
+          panX: pan.x,
+          panY: pan.y,
+          active: false,
+        };
+      } else {
+        panDrag.current = null;
+      }
+
+      setPanning(false);
+      justPanned.current = true;
+      return;
+    }
+  }
+
+  panDrag.current = null;
+  setPanning(false);
+};
+
 
   const onSvgWheel = (e: ReactWheelEvent<SVGSVGElement>) => {
     const dx = e.shiftKey ? e.deltaY : e.deltaX;
@@ -800,6 +883,7 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
             drawing={!!draft}
             scale={scale}
             onPinClick={onPinClick}
+            onPinPointerDown={onPinPointerDown}
           />
 
           {previewD && (
