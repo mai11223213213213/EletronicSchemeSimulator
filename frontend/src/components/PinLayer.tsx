@@ -11,7 +11,7 @@ interface Props {
 }
 
 /** Radius of the invisible click area around a pin, in SCREEN pixels. The visible ring is only 3–4.5 px. */
-const HIT_RADIUS_PX = 14
+const HIT_RADIUS_PX = 18
 
 /** Clickable connection points. Rings show where a wire can start or end. */
 export function PinLayer({ data, drawing, scale, onPinClick }: Props) {
