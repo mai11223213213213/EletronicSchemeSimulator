@@ -1,80 +1,207 @@
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { wirePath } from '../model/wires'
-import { nearestOnPath, toPathData } from '../model/routing'
-import type { CircuitData, Point, Selection } from '../model/types'
 
-const WIRE = '#2563eb'
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
+
+import { wirePath } from "../model/wires";
+import { nearestOnPath, toPathData } from "../model/routing";
+import type { CircuitData, Point, Selection } from "../model/types";
+
+const WIRE = "#2563eb";
 
 interface Props {
-  data: CircuitData
-  selection: Selection | null
-  onWireClick: (e: ReactMouseEvent, wireId: string) => void
-  onWireDoubleClick: (e: ReactMouseEvent, wireId: string) => void
-  onJunctionClick: (e: ReactMouseEvent, junctionId: string) => void
-  /** Dragging a bend handle of the selected wire (index = position in wire.bends). */
-  onBendPointerDown: (e: ReactPointerEvent<SVGCircleElement>, wireId: string, index: number) => void
-  onBendPointerMove: (e: ReactPointerEvent<SVGCircleElement>, wireId: string, index: number) => void
-  onBendPointerUp: (e: ReactPointerEvent<SVGCircleElement>) => void
-  onBendRemove: (wireId: string, index: number) => void
-  /** The handle being dragged right now: always drawn, even if the wire does not pass through it at this moment. */
-  activeBend: { wireId: string; index: number } | null
+  data: CircuitData;
+  selection: Selection | null;
+  scale: number;
+
+  onWireClick: (e: ReactMouseEvent, wireId: string) => void;
+  onWireDoubleClick: (e: ReactMouseEvent, wireId: string) => void;
+  onJunctionClick: (e: ReactMouseEvent, junctionId: string) => void;
+
+  onBendPointerDown: (
+    e: ReactPointerEvent<SVGCircleElement>,
+    wireId: string,
+    index: number,
+  ) => void;
+  onBendPointerMove: (
+    e: ReactPointerEvent<SVGCircleElement>,
+    wireId: string,
+    index: number,
+  ) => void;
+  onBendPointerUp: (e: ReactPointerEvent<SVGCircleElement>) => void;
+
+  onBendRemove: (wireId: string, index: number) => void;
+
+  activeBend: {
+    wireId: string;
+    index: number;
+  } | null;
 }
 
-/** All finished wires (orthogonal or diagonal paths), their junction dots, and the bend handles of the selected wire. */
+/**
+ * Draws wires, junctions and editable bend handles.
+ * The visible handles stay small, while their pointer targets are larger.
+ */
 export function WireLayer({
-  data, selection, onWireClick, onWireDoubleClick, onJunctionClick,
-  onBendPointerDown, onBendPointerMove, onBendPointerUp, onBendRemove, activeBend,
+  data,
+  selection,
+  scale,
+  onWireClick,
+  onWireDoubleClick,
+  onJunctionClick,
+  onBendPointerDown,
+  onBendPointerMove,
+  onBendPointerUp,
+  onBendRemove,
+  activeBend,
 }: Props) {
-  // Like a drawn schematic: a dot only where 3+ wires meet (2 wires is just a bend).
-  const degree = new Map<string, number>()
-  for (const w of data.wires)
-    for (const e of [w.from, w.to])
-      if (e.kind === 'junction') degree.set(e.junctionId, (degree.get(e.junctionId) ?? 0) + 1)
+  const degree = new Map<string, number>();
+
+  for (const wire of data.wires) {
+    for (const endpoint of [wire.from, wire.to]) {
+      if (endpoint.kind === "junction") {
+        degree.set(
+          endpoint.junctionId,
+          (degree.get(endpoint.junctionId) ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  // Keep the touch target approximately 36px wide at every zoom level.
+  const handleRadius = 18 / scale;
 
   return (
     <g>
-      {data.wires.map((w) => {
-        const pts: Point[] | null = wirePath(w, data)
-        if (!pts) return null
-        const d = toPathData(pts)
-        const selected = selection?.kind === 'wire' && selection.id === w.id
+      {data.wires.map((wire) => {
+        const points: Point[] | null = wirePath(wire, data);
+
+        if (!points) return null;
+
+        const path = toPathData(points);
+        const selected =
+          selection?.kind === "wire" && selection.id === wire.id;
+
         return (
-          <g key={w.id}>
-            {selected && <path d={d} stroke="#93c5fd" strokeWidth="7" fill="none" strokeLinejoin="round" />}
-            <path d={d} stroke={WIRE} strokeWidth="2.5" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-            {/* wide invisible stroke = easy to click */}
-            <path
-              d={d} stroke="transparent" strokeWidth="10" fill="none"
-              className="cursor-pointer" onClick={(e) => onWireClick(e, w.id)}
-              onDoubleClick={(e) => onWireDoubleClick(e, w.id)}
-            />
-            {/* the "nodes": one handle per stored bend; drag to move, double-click to delete */}
-            {selected && w.bends.map((b, i) => {
-              // A bend the router skipped (the wire runs out along a line and back) is not on the drawn wire:
-              // no handle for it, or it would float in empty space.
-              const dragging = activeBend?.wireId === w.id && activeBend.index === i
-                if (!dragging && (nearestOnPath(pts, b)?.dist ?? Infinity) > 0.5) return null
-                return (
-                <circle
-                  key={i} cx={b.x} cy={b.y} r="5" fill="#ffffff" stroke={WIRE} strokeWidth="2" className="cursor-move"
-                  onPointerDown={(e) => onBendPointerDown(e, w.id, i)}
-                  onPointerMove={(e) => onBendPointerMove(e, w.id, i)}
-                  onPointerUp={onBendPointerUp}
-                  onPointerCancel={onBendPointerUp}
-                  onClick={(e) => e.stopPropagation()} // otherwise the click that ends a drag would deselect the wire
-                onDoubleClick={(e) => { e.stopPropagation(); onBendRemove(w.id, i) }}
+          <g key={wire.id}>
+            {selected && (
+              <path
+                d={path}
+                stroke="#93c5fd"
+                strokeWidth="7"
+                fill="none"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                pointerEvents="none"
               />
-              )
-            })}
+            )}
+
+            <path
+              d={path}
+              stroke={WIRE}
+              strokeWidth="2.5"
+              fill="none"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              pointerEvents="none"
+            />
+
+            {/* Invisible hit area for selecting a wire. */}
+            <path
+              d={path}
+              stroke="transparent"
+              strokeWidth={Math.max(12 / scale, 10)}
+              fill="none"
+              className="cursor-pointer"
+              onClick={(event) => onWireClick(event, wire.id)}
+              onDoubleClick={(event) =>
+                onWireDoubleClick(event, wire.id)
+              }
+            />
+
+            {selected &&
+              wire.bends.map((bend, index) => {
+                const dragging =
+                  activeBend?.wireId === wire.id &&
+                  activeBend.index === index;
+
+                // Do not show handles for bends that are not on the
+                // currently rendered route.
+                if (
+                  !dragging &&
+                  (nearestOnPath(points, bend)?.dist ?? Infinity) > 0.5
+                ) {
+                  return null;
+                }
+
+                return (
+                  <g key={index}>
+                    {/* Large invisible touch target. */}
+                    <circle
+                      cx={bend.x}
+                      cy={bend.y}
+                      r={handleRadius}
+                      fill="transparent"
+                      className="cursor-move"
+                      style={{ touchAction: "none" }}
+                      onPointerDown={(event) =>
+                        onBendPointerDown(event, wire.id, index)
+                      }
+                      onPointerMove={(event) =>
+                        onBendPointerMove(event, wire.id, index)
+                      }
+                      onPointerUp={onBendPointerUp}
+                      onPointerCancel={onBendPointerUp}
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation();
+                        onBendRemove(wire.id, index);
+                      }}
+                    />
+
+                    {/* Small visible handle — its appearance is unchanged. */}
+                    <circle
+                      cx={bend.x}
+                      cy={bend.y}
+                      r="5"
+                      fill={dragging ? "#dbeafe" : "#ffffff"}
+                      stroke={WIRE}
+                      strokeWidth="2"
+                      pointerEvents="none"
+                    />
+                  </g>
+                );
+              })}
           </g>
-        )
+        );
       })}
-      {data.junctions.filter((j) => (degree.get(j.id) ?? 0) >= 3).map((j) => (
-        <g key={j.id} className="cursor-pointer" onClick={(e) => onJunctionClick(e, j.id)}>
-          <circle cx={j.x} cy={j.y} r="8" fill="transparent" />
-          <circle cx={j.x} cy={j.y} r="4" fill={WIRE} />
-        </g>
-      ))}
+
+      {data.junctions
+        .filter((junction) => (degree.get(junction.id) ?? 0) >= 3)
+        .map((junction) => (
+          <g
+            key={junction.id}
+            className="cursor-pointer"
+            onClick={(event) =>
+              onJunctionClick(event, junction.id)
+            }
+          >
+            <circle
+              cx={junction.x}
+              cy={junction.y}
+              r="12"
+              fill="transparent"
+            />
+            <circle
+              cx={junction.x}
+              cy={junction.y}
+              r="4"
+              fill={WIRE}
+              pointerEvents="none"
+            />
+          </g>
+        ))}
     </g>
-  )
+  );
 }

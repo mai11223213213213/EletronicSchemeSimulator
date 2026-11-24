@@ -549,6 +549,7 @@ const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
             onBendPointerUp={onBendPointerUp}
             onBendRemove={removeBend}
             activeBend={activeBend}
+            scale={scale}
           />
 
           {elements.map((el) => (
