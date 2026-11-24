@@ -1,12 +1,9 @@
-
-import { Trash2, X } from "lucide-react";
+import { Trash2, Undo2, X } from "lucide-react";
 import { useCircuitStore } from "../store/circuitStore";
 
-/**
- * Wire style and editing actions.
- */
 export function WirePanel() {
-  const drawing = useCircuitStore((s) => s.draft !== null);
+  const draft = useCircuitStore((s) => s.draft);
+  const drawing = draft !== null;
 
   const selected = useCircuitStore((s) =>
     s.selection?.kind === "wire"
@@ -18,6 +15,7 @@ export function WirePanel() {
   const setWireStyle = useCircuitStore((s) => s.setWireStyle);
   const deleteSelected = useCircuitStore((s) => s.deleteSelected);
   const cancelWire = useCircuitStore((s) => s.cancelWire);
+  const removeLastBend = useCircuitStore((s) => s.removeLastBend);
 
   if (!drawing && !selected) return null;
 
@@ -49,29 +47,43 @@ export function WirePanel() {
           {drawing ? "New wire" : "Wire"}
         </h3>
 
-        {drawing && (
-          <button
-            type="button"
-            onClick={cancelWire}
-            title="Cancel wire drawing"
-            aria-label="Cancel wire drawing"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-100 active:bg-gray-200"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {drawing && draft.bends.length > 0 && (
+            <button
+              type="button"
+              onClick={removeLastBend}
+              title="Undo last bend"
+              aria-label="Undo last bend"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-100 active:bg-gray-200"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+          )}
 
-        {selected && (
-          <button
-            type="button"
-            onClick={deleteSelected}
-            title="Delete wire"
-            aria-label="Delete wire"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 transition hover:bg-red-50 active:bg-red-100"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
+          {drawing && (
+            <button
+              type="button"
+              onClick={cancelWire}
+              title="Cancel wire drawing"
+              aria-label="Cancel wire drawing"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-100 active:bg-gray-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+
+          {selected && (
+            <button
+              type="button"
+              onClick={deleteSelected}
+              title="Delete wire"
+              aria-label="Delete wire"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 transition hover:bg-red-50 active:bg-red-100"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -80,8 +92,8 @@ export function WirePanel() {
       </div>
 
       <p className="mt-2 text-xs text-gray-400">
-        D — switch style · drag a segment to move it · drag the dots to move
-        bends
+        Drag from a pin. Release on canvas to add a bend. Drag the empty canvas
+        again to continue. Click a pin or wire to finish.
       </p>
     </div>
   );

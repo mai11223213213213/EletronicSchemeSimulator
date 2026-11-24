@@ -41,9 +41,13 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
   const draft = useCircuitStore((s) => s.draft);
   const justPanned = useRef(false);
   const wireDrag = useRef<{
-    pointerId: number;
-    from: Endpoint;
-  } | null>(null);
+  pointerId: number;
+  from: Endpoint;
+  mode: "source" | "continue";
+  startX: number;
+  startY: number;
+  moved: boolean;
+} | null>(null);
 
   const suppressNextClick = useRef(false);
   // Active touch pointers used for pinch-to-zoom.
@@ -183,34 +187,36 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
   };
 
   // ---- wiring ---------------------------------------------------------------
-  const onPinPointerDown = (
-    e: ReactPointerEvent<SVGGElement>,
-    elementId: string,
-    pinId: string,
-  ) => {
-    // If a wire is already being drawn, let the normal click handler
-    // finish it instead of starting another drag.
-    if (draft || e.button !== 0) return;
+ const onPinPointerDown = (
+  e: ReactPointerEvent<SVGGElement>,
+  elementId: string,
+  pinId: string,
+) => {
+  if (draft || e.button !== 0) return;
 
-    const from = {
-      kind: "pin",
-      elementId,
-      pinId,
-    } as const;
-
-    startWire(from);
-
-    wireDrag.current = {
-      pointerId: e.pointerId,
-      from,
-    };
-
-    const svg = e.currentTarget.ownerSVGElement;
-
-    if (svg) {
-      svg.setPointerCapture(e.pointerId);
-    }
+  const from: Endpoint = {
+    kind: "pin",
+    elementId,
+    pinId,
   };
+
+  startWire(from);
+
+  wireDrag.current = {
+    pointerId: e.pointerId,
+    from,
+    mode: "source",
+    startX: e.clientX,
+    startY: e.clientY,
+    moved: false,
+  };
+
+  const svg = e.currentTarget.ownerSVGElement;
+
+  if (svg) {
+    svg.setPointerCapture(e.pointerId);
+  }
+};
 
   const findWireTarget = (
     point: Point,
@@ -305,19 +311,34 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
     return null;
   };
 
-  const onPinClick = (e: ReactMouseEvent, elementId: string, pinId: string) => {
-    e.stopPropagation();
+ const onPinClick = (
+  e: ReactMouseEvent,
+  elementId: string,
+  pinId: string,
+) => {
+  e.stopPropagation();
 
-    if (suppressNextClick.current) {
-      suppressNextClick.current = false;
-      return;
+  if (suppressNextClick.current) {
+    suppressNextClick.current = false;
+    return;
+  }
+
+  const endpoint: Endpoint = {
+    kind: "pin",
+    elementId,
+    pinId,
+  };
+
+  if (draft) {
+    if (!sameEndpoint(draft.from, endpoint)) {
+      finishWire(endpoint);
     }
 
-    const ep = { kind: "pin", elementId, pinId } as const;
+    return;
+  }
 
-    if (draft) finishWire(ep);
-    else startWire(ep);
-  };
+  startWire(endpoint);
+};
 
   const onJunctionClick = (e: ReactMouseEvent, junctionId: string) => {
     e.stopPropagation();
@@ -555,150 +576,179 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
 
   const PAN_THRESHOLD = 4;
 
-  const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
-    justPanned.current = false;
+ const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+  justPanned.current = false;
 
-    if (e.button !== 0 && e.button !== 1) return;
+  if (e.button !== 0 && e.button !== 1) return;
 
-    if (e.pointerType === "touch") {
-      touchPointers.current.set(e.pointerId, {
+  if (e.pointerType === "touch") {
+    touchPointers.current.set(e.pointerId, {
+      x: e.clientX,
+      y: e.clientY,
+    });
+
+    if (touchPointers.current.size === 2) {
+      // Pinch-to-zoom takes priority over wire dragging.
+      wireDrag.current = null;
+
+      const points = Array.from(touchPointers.current.values());
+      const [a, b] = points;
+
+      const midpoint = {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+      };
+
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+
+      pinch.current = {
+        startDistance: Math.max(distance, 1),
+        startCellPx: cellPx,
+        worldPoint: toWorld(midpoint.x, midpoint.y),
+      };
+
+      panDrag.current = null;
+      justPanned.current = true;
+      setPanning(true);
+
+      for (const pointerId of touchPointers.current.keys()) {
+        if (!e.currentTarget.hasPointerCapture(pointerId)) {
+          e.currentTarget.setPointerCapture(pointerId);
+        }
+      }
+
+      return;
+    }
+  }
+
+  // A pointer that has already started drawing a wire must not pan the canvas.
+  if (wireDrag.current?.pointerId === e.pointerId) {
+    panDrag.current = null;
+    return;
+  }
+
+  const target = e.target as Element;
+
+  const isCanvasBackground =
+    target === e.currentTarget ||
+    (target.tagName.toLowerCase() === "rect" &&
+      target.parentElement === e.currentTarget);
+
+  // When drawing, dragging an empty part of the canvas continues the wire.
+  if (draft && isCanvasBackground && e.button === 0) {
+    wireDrag.current = {
+      pointerId: e.pointerId,
+      from: draft.from,
+      mode: "continue",
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+    };
+
+    panDrag.current = null;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    return;
+  }
+
+  panDrag.current = {
+    x: e.clientX,
+    y: e.clientY,
+    panX: pan.x,
+    panY: pan.y,
+    active: false,
+  };
+};
+
+  const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+  if (e.pointerType === "touch") {
+    const pointers = touchPointers.current;
+
+    if (pointers.has(e.pointerId)) {
+      pointers.set(e.pointerId, {
         x: e.clientX,
         y: e.clientY,
       });
-
-      if (touchPointers.current.size === 2) {
-        // Two-finger gestures cancel wire dragging and take priority.
-        if (wireDrag.current) {
-          cancelWire();
-          wireDrag.current = null;
-          suppressNextClick.current = true;
-        }
-
-        const points = Array.from(touchPointers.current.values());
-        const [a, b] = points;
-
-        const midpoint = {
-          x: (a.x + b.x) / 2,
-          y: (a.y + b.y) / 2,
-        };
-
-        const distance = Math.hypot(a.x - b.x, a.y - b.y);
-
-        pinch.current = {
-          startDistance: Math.max(distance, 1),
-          startCellPx: cellPx,
-          worldPoint: toWorld(midpoint.x, midpoint.y),
-        };
-
-        panDrag.current = null;
-        justPanned.current = true;
-        setPanning(true);
-
-        for (const pointerId of touchPointers.current.keys()) {
-          if (!e.currentTarget.hasPointerCapture(pointerId)) {
-            e.currentTarget.setPointerCapture(pointerId);
-          }
-        }
-
-        return;
-      }
     }
 
-    // The pointer that started a wire must not start canvas panning.
-    if (wireDrag.current?.pointerId === e.pointerId) {
-      panDrag.current = null;
-      return;
-    }
+    if (pinch.current && pointers.size >= 2) {
+      const points = Array.from(pointers.values());
+      const [a, b] = points;
 
-    panDrag.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panX: pan.x,
-      panY: pan.y,
-      active: false,
-    };
-  };
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
 
-  const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (e.pointerType === "touch") {
-      const pointers = touchPointers.current;
+      const midpoint = {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+      };
 
-      if (pointers.has(e.pointerId)) {
-        pointers.set(e.pointerId, {
-          x: e.clientX,
-          y: e.clientY,
-        });
-      }
+      const rect = e.currentTarget.getBoundingClientRect();
 
-      if (pinch.current && pointers.size >= 2) {
-        const points = Array.from(pointers.values());
-        const [a, b] = points;
-
-        const distance = Math.hypot(a.x - b.x, a.y - b.y);
-
-        const midpoint = {
-          x: (a.x + b.x) / 2,
-          y: (a.y + b.y) / 2,
-        };
-
-        const rect = e.currentTarget.getBoundingClientRect();
-
-        const nextCellPx = Math.min(
-          MAX_CELL,
-          Math.max(
-            MIN_CELL,
-            Math.round(
-              pinch.current.startCellPx *
-                (distance / pinch.current.startDistance),
-            ),
+      const nextCellPx = Math.min(
+        MAX_CELL,
+        Math.max(
+          MIN_CELL,
+          Math.round(
+            pinch.current.startCellPx *
+              (distance / pinch.current.startDistance),
           ),
-        );
+        ),
+      );
 
-        const nextScale = nextCellPx / GRID;
+      const nextScale = nextCellPx / GRID;
 
-        setCellPx(nextCellPx);
+      setCellPx(nextCellPx);
 
-        setPan({
-          x: midpoint.x - rect.left - pinch.current.worldPoint.x * nextScale,
-          y: midpoint.y - rect.top - pinch.current.worldPoint.y * nextScale,
-        });
+      setPan({
+        x: midpoint.x - rect.left - pinch.current.worldPoint.x * nextScale,
+        y: midpoint.y - rect.top - pinch.current.worldPoint.y * nextScale,
+      });
 
-        justPanned.current = true;
-        return;
-      }
-    }
-
-    // Move the wire preview while dragging from a pin.
-    if (wireDrag.current?.pointerId === e.pointerId) {
-      setCursor(snapPoint(toWorld(e.clientX, e.clientY)));
+      justPanned.current = true;
       return;
     }
+  }
 
-    const d = panDrag.current;
+  const activeWireDrag = wireDrag.current;
 
-    if (d) {
-      if (
-        !d.active &&
-        Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD
-      ) {
-        d.active = true;
-        justPanned.current = true;
-        setPanning(true);
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }
-
-      if (d.active) {
-        setPan({
-          x: d.panX + e.clientX - d.x,
-          y: d.panY + e.clientY - d.y,
-        });
-      }
+  if (activeWireDrag?.pointerId === e.pointerId) {
+    if (
+      Math.hypot(
+        e.clientX - activeWireDrag.startX,
+        e.clientY - activeWireDrag.startY,
+      ) > PAN_THRESHOLD
+    ) {
+      activeWireDrag.moved = true;
     }
 
-    if (draft) {
-      setCursor(snapPoint(toWorld(e.clientX, e.clientY)));
+    setCursor(snapPoint(toWorld(e.clientX, e.clientY)));
+    return;
+  }
+
+  const d = panDrag.current;
+
+  if (d) {
+    if (
+      !d.active &&
+      Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD
+    ) {
+      d.active = true;
+      justPanned.current = true;
+      setPanning(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
     }
-  };
+
+    if (d.active) {
+      setPan({
+        x: d.panX + e.clientX - d.x,
+        y: d.panY + e.clientY - d.y,
+      });
+    }
+  }
+
+  if (draft) {
+    setCursor(snapPoint(toWorld(e.clientX, e.clientY)));
+  }
+};
 
   
 const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
@@ -708,9 +758,9 @@ const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
       : null;
 
   if (activeWireDrag) {
-    if (e.type === "pointercancel") {
-      cancelWire();
-    } else {
+    const wasCancelled = e.type === "pointercancel";
+
+    if (!wasCancelled) {
       const point = toWorld(e.clientX, e.clientY);
       const target = findWireTarget(point);
 
@@ -721,12 +771,29 @@ const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
         finishWire(target.endpoint);
       } else if (target?.kind === "wire") {
         finishWireOnWire(target.wireId, target.point);
+      } else if (
+        !target &&
+        activeWireDrag.moved
+      ) {
+        // Releasing on empty canvas fixes a bend.
+        const bend = snapPoint(point);
+        addBend(bend);
+        setCursor(bend);
       }
     }
 
     wireDrag.current = null;
-    suppressNextClick.current = true;
     panDrag.current = null;
+
+    // The initial pin drag always captures the click that follows pointerup.
+    // A continuation drag captures it only when the pointer actually moved.
+    if (
+      activeWireDrag.mode === "source" ||
+      activeWireDrag.moved ||
+      wasCancelled
+    ) {
+      suppressNextClick.current = true;
+    }
 
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -914,7 +981,7 @@ const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
 
         <div className="pointer-events-none absolute right-full top-0 mr-2 hidden w-64 rounded-md bg-white px-3 py-2 text-xs text-gray-600 shadow-lg group-focus-within:block group-hover:block">
           {draft
-            ? "Click canvas — add bend · click pin/wire — finish · D — diagonal/straight · Esc — cancel"
+            ?  "Drag from the wire end to continue · release on canvas to add a bend · click pin/wire to finish · D — wire style · Esc — cancel"
             : selectedComponent
               ? "Tap the canvas to place the selected component"
               : "Click pin — new wire · Drag canvas / wheel — pan · Pinch — zoom · R — rotate · Del — delete · Ctrl+Z — undo"}

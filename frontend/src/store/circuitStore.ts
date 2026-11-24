@@ -46,6 +46,7 @@ interface CircuitState extends CircuitData {
 
   startWire: (from: Endpoint) => void;
   addBend: (p: Point) => void;
+  removeLastBend: () => void;
   finishWire: (to: Endpoint) => void;
   /** Finish the wire being drawn by T-connecting it into an existing wire. */
   finishWireOnWire: (wireId: string, p: Point) => void;
@@ -208,6 +209,17 @@ export const useCircuitStore = create<CircuitState>((set, get) => {
         if (prev && same(prev, p)) return {};
         return { draft: { ...s.draft, bends: [...s.draft.bends, p] } };
       }),
+      removeLastBend: () =>
+  set((s) => {
+    if (!s.draft || s.draft.bends.length === 0) return {};
+
+    return {
+      draft: {
+        ...s.draft,
+        bends: s.draft.bends.slice(0, -1),
+      },
+    };
+  }),
 
     finishWire: (to) => {
       const { draft } = get();
