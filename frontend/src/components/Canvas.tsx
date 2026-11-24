@@ -7,11 +7,21 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
-import { endpointPos, snapPoint } from "../model/geometry";
+import {
+  endpointPos,
+  elementPins,
+  sameEndpoint,
+  snapPoint,
+} from "../model/geometry";
 import { GRID, isComponentType } from "../model/registry";
 import { nearestOnPath, routeWire, toPathData } from "../model/routing";
 import { wirePath } from "../model/wires";
-import type { CircuitElement, ComponentType, Point } from "../model/types";
+import type {
+  CircuitElement,
+  ComponentType,
+  Endpoint,
+  Point,
+} from "../model/types";
 import { useCircuitStore } from "../store/circuitStore";
 import { ElementView } from "./ElementView";
 import { GridSettings, MAX_CELL, MIN_CELL } from "./GridSettings";
@@ -30,6 +40,12 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
   const selection = useCircuitStore((s) => s.selection);
   const draft = useCircuitStore((s) => s.draft);
   const justPanned = useRef(false);
+  const wireDrag = useRef<{
+    pointerId: number;
+    from: Endpoint;
+  } | null>(null);
+
+  const suppressNextClick = useRef(false);
   // Active touch pointers used for pinch-to-zoom.
   const touchPointers = useRef(new Map<number, { x: number; y: number }>());
 
@@ -167,9 +183,110 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
   };
 
   // ---- wiring ---------------------------------------------------------------
+  const onPinPointerDown = (
+    e: ReactPointerEvent<SVGGElement>,
+    elementId: string,
+    pinId: string,
+  ) => {
+    // If a wire is already being drawn, let the normal click handler
+    // finish it instead of starting another drag.
+    if (draft || e.button !== 0) return;
 
+    const from = {
+      kind: "pin",
+      elementId,
+      pinId,
+    } as const;
+
+    startWire(from);
+
+    wireDrag.current = {
+      pointerId: e.pointerId,
+      from,
+    };
+
+    const svg = e.currentTarget.ownerSVGElement;
+
+    if (svg) {
+      svg.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const findWireTarget = (point: Point): Endpoint | null => {
+    const maxDistance = 22 / scale;
+    let nearest: { endpoint: Endpoint; distance: number } | null = null;
+
+    // Search component pins.
+    for (const element of elements) {
+      for (const { pin, x, y } of elementPins(element)) {
+        const distance = Math.hypot(point.x - x, point.y - y);
+
+        if (
+          distance <= maxDistance &&
+          (!nearest || distance < nearest.distance)
+        ) {
+          nearest = {
+            endpoint: {
+              kind: "pin",
+              elementId: element.id,
+              pinId: pin.id,
+            },
+            distance,
+          };
+        }
+      }
+    }
+
+    // Search existing junctions.
+    for (const junction of junctions) {
+      const distance = Math.hypot(point.x - junction.x, point.y - junction.y);
+
+      if (
+        distance <= maxDistance &&
+        (!nearest || distance < nearest.distance)
+      ) {
+        nearest = {
+          endpoint: {
+            kind: "junction",
+            junctionId: junction.id,
+          },
+          distance,
+        };
+      }
+    }
+
+    if (nearest) return nearest.endpoint;
+
+    // Search existing wires for a T-connection.
+    let nearestWire: { id: string; distance: number } | null = null;
+
+    for (const wire of wires) {
+      const path = wirePath(wire, { elements, junctions });
+      if (!path) continue;
+
+      const hit = nearestOnPath(path, point);
+
+      if (
+        hit &&
+        hit.dist <= 14 / scale &&
+        (!nearestWire || hit.dist < nearestWire.distance)
+      ) {
+        nearestWire = {
+          id: wire.id,
+          distance: hit.dist,
+        };
+      }
+    }
+
+    return null;
+  };
   const onPinClick = (e: ReactMouseEvent, elementId: string, pinId: string) => {
     e.stopPropagation();
+
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false;
+      return;
+    }
 
     const ep = { kind: "pin", elementId, pinId } as const;
 
