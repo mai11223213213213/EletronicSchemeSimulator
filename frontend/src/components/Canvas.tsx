@@ -14,7 +14,12 @@ import {
   snapPoint,
 } from "../model/geometry";
 import { GRID, isComponentType } from "../model/registry";
-import { nearestOnPath, routeWire, toPathData } from "../model/routing";
+import {
+  nearestOnPath,
+  routeWire,
+  toPathData,
+  simplify,
+} from "../model/routing";
 import { wirePath } from "../model/wires";
 import type {
   CircuitElement,
@@ -360,106 +365,114 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
     moved: boolean;
   } | null>(null);
 
-  const onSegmentPointerDown = (
-    e: ReactPointerEvent<SVGPathElement>,
-    wireId: string,
-    segment: number,
-  ) => {
-    e.stopPropagation();
+ const onSegmentPointerDown = (
+  e: ReactPointerEvent<SVGPathElement>,
+  wireId: string,
+  segment: number,
+) => {
+  e.stopPropagation();
 
-    const wire = wires.find((item) => item.id === wireId);
-    if (!wire) return;
+  // Do not start editing an existing wire while creating another one.
+  if (draft) return;
 
-    const points = wirePath(wire, { elements, junctions });
-    if (!points || !points[segment] || !points[segment + 1]) return;
+  const wire = wires.find((item) => item.id === wireId);
+  if (!wire) return;
 
-    const a = points[segment];
-    const b = points[segment + 1];
+  const points = wirePath(wire, { elements, junctions });
 
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const length = Math.hypot(dx, dy);
+  if (!points || !points[segment] || !points[segment + 1]) return;
 
-    if (length === 0) return;
+  const a = points[segment];
+  const b = points[segment + 1];
 
-    select({ kind: "wire", id: wireId });
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
 
-    segmentDrag.current = {
-      wireId,
-      segment,
-      points,
-      start: toWorld(e.clientX, e.clientY),
-      normal: {
-        x: -dy / length,
-        y: dx / length,
-      },
-      moved: false,
-    };
+  if (length === 0) return;
 
-    e.currentTarget.setPointerCapture(e.pointerId);
+  select({ kind: "wire", id: wireId });
+
+  segmentDrag.current = {
+    wireId,
+    segment,
+    points,
+    start: toWorld(e.clientX, e.clientY),
+    normal: {
+      x: -dy / length,
+      y: dx / length,
+    },
+    moved: false,
   };
+
+  e.currentTarget.setPointerCapture(e.pointerId);
+};
 
   const onSegmentPointerMove = (e: ReactPointerEvent<SVGPathElement>) => {
-    const drag = segmentDrag.current;
-    if (!drag) return;
+  const drag = segmentDrag.current;
+  if (!drag) return;
 
-    const current = toWorld(e.clientX, e.clientY);
+  const current = toWorld(e.clientX, e.clientY);
 
-    const dx = current.x - drag.start.x;
-    const dy = current.y - drag.start.y;
+  const dx = current.x - drag.start.x;
+  const dy = current.y - drag.start.y;
 
-    const rawOffset = dx * drag.normal.x + dy * drag.normal.y;
+  const rawOffset = dx * drag.normal.x + dy * drag.normal.y;
 
-    // Ignore tiny movements so a normal tap only selects the wire.
-    if (!drag.moved && Math.hypot(dx, dy) * scale < 4) return;
+  // Ignore tiny movements so a normal click only selects the wire.
+  if (!drag.moved && Math.hypot(dx, dy) * scale < 4) return;
 
-    if (!drag.moved) {
-      beginMove();
-      drag.moved = true;
-    }
+  if (!drag.moved) {
+    beginMove();
+    drag.moved = true;
+  }
 
-    const wire = wires.find((item) => item.id === drag.wireId);
-    if (!wire) return;
+  const offset = wires.find((wire) => wire.id === drag.wireId)?.diagonal
+    ? Math.round(rawOffset * 100) / 100
+    : Math.round(rawOffset / GRID) * GRID;
 
-    // Orthogonal wires move in grid increments.
-    const offset = wire.diagonal
-      ? Math.round(rawOffset * 100) / 100
-      : Math.round(rawOffset / GRID) * GRID;
+  const a = drag.points[drag.segment];
+  const b = drag.points[drag.segment + 1];
 
-    const a = drag.points[drag.segment];
-    const b = drag.points[drag.segment + 1];
-
-    const movedA = {
-      x: a.x + drag.normal.x * offset,
-      y: a.y + drag.normal.y * offset,
-    };
-
-    const movedB = {
-      x: b.x + drag.normal.x * offset,
-      y: b.y + drag.normal.y * offset,
-    };
-
-    // Keep both endpoints fixed and insert the shifted segment
-    // between its original neighbours.
-    const nextPath = [
-      ...drag.points.slice(0, drag.segment),
-      a,
-      movedA,
-      movedB,
-      b,
-      ...drag.points.slice(drag.segment + 2),
-    ];
-
-    setWireBends(drag.wireId, nextPath.slice(1, -1));
+  // Move both ends of the selected segment by the same perpendicular offset.
+  const movedA = {
+    x: Math.round((a.x + drag.normal.x * offset) * 100) / 100,
+    y: Math.round((a.y + drag.normal.y * offset) * 100) / 100,
   };
+
+  const movedB = {
+    x: Math.round((b.x + drag.normal.x * offset) * 100) / 100,
+    y: Math.round((b.y + drag.normal.y * offset) * 100) / 100,
+  };
+
+  // Preserve the rest of the route and connect the shifted segment
+  // to its original neighbours.
+  const nextPath = [
+    ...drag.points.slice(0, drag.segment),
+    a,
+    movedA,
+    movedB,
+    b,
+    ...drag.points.slice(drag.segment + 2),
+  ];
+
+  // Store a clean path without duplicate or redundant collinear points.
+  const nextBends = simplify(nextPath.slice(1, -1));
+
+  setWireBends(drag.wireId, nextBends);
+};
 
   const onSegmentPointerUp = (e: ReactPointerEvent<SVGPathElement>) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
+  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
 
-    segmentDrag.current = null;
-  };
+  if (segmentDrag.current?.moved) {
+    pruneDeadBends();
+  }
+
+  segmentDrag.current = null;
+};
 
   // ---- editing the bends of the selected wire ------------------------------
 
