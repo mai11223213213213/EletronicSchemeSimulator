@@ -1,95 +1,100 @@
-
-import { HelpCircle } from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
+import { HelpCircle } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
-} from 'react'
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { endpointPos, snapPoint } from '../model/geometry'
-import { GRID, isComponentType } from '../model/registry'
-import { nearestOnPath, routeWire, toPathData } from '../model/routing'
-import { wirePath } from '../model/wires'
-import type { CircuitElement, ComponentType, Point } from '../model/types'
-import { useCircuitStore } from '../store/circuitStore'
-import { ElementView } from './ElementView'
-import { GridSettings } from './GridSettings'
-import { PinLayer } from './PinLayer'
-import { WireLayer } from './WireLayer'
+} from "react";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { endpointPos, snapPoint } from "../model/geometry";
+import { GRID, isComponentType } from "../model/registry";
+import { nearestOnPath, routeWire, toPathData } from "../model/routing";
+import { wirePath } from "../model/wires";
+import type { CircuitElement, ComponentType, Point } from "../model/types";
+import { useCircuitStore } from "../store/circuitStore";
+import { ElementView } from "./ElementView";
+import { GridSettings, MAX_CELL, MIN_CELL } from "./GridSettings";
+import { PinLayer } from "./PinLayer";
+import { WireLayer } from "./WireLayer";
 
 interface CanvasProps {
-  selectedComponent: ComponentType | null
-  onComponentPlaced: () => void
+  selectedComponent: ComponentType | null;
+  onComponentPlaced: () => void;
 }
 
-export function Canvas({
-  selectedComponent,
-  onComponentPlaced,
-}: CanvasProps) {
-  const elements = useCircuitStore((s) => s.elements)
-  const wires = useCircuitStore((s) => s.wires)
-  const junctions = useCircuitStore((s) => s.junctions)
-  const selection = useCircuitStore((s) => s.selection)
-  const draft = useCircuitStore((s) => s.draft)
+export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
+  const elements = useCircuitStore((s) => s.elements);
+  const wires = useCircuitStore((s) => s.wires);
+  const junctions = useCircuitStore((s) => s.junctions);
+  const selection = useCircuitStore((s) => s.selection);
+  const draft = useCircuitStore((s) => s.draft);
+  const justPanned = useRef(false);
+  // Active touch pointers used for pinch-to-zoom.
+  const touchPointers = useRef(new Map<number, { x: number; y: number }>());
+
+  const pinch = useRef<{
+    startDistance: number;
+    startCellPx: number;
+    worldPoint: Point;
+  } | null>(null);
 
   // Store actions are stable references, so selecting them never causes a re-render.
-  const addElement = useCircuitStore((s) => s.addElement)
-  const beginMove = useCircuitStore((s) => s.beginMove)
-  const moveElement = useCircuitStore((s) => s.moveElement)
-  const select = useCircuitStore((s) => s.select)
-  const startWire = useCircuitStore((s) => s.startWire)
-  const addBend = useCircuitStore((s) => s.addBend)
-  const finishWire = useCircuitStore((s) => s.finishWire)
-  const finishWireOnWire = useCircuitStore((s) => s.finishWireOnWire)
-  const cancelWire = useCircuitStore((s) => s.cancelWire)
-  const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
-  const moveBend = useCircuitStore((s) => s.moveBend)
-  const insertBend = useCircuitStore((s) => s.insertBend)
-  const removeBend = useCircuitStore((s) => s.removeBend)
-  const pruneDeadBends = useCircuitStore((s) => s.pruneDeadBends)
-  const diagonalWires = useCircuitStore((s) => s.diagonalWires)
+  const addElement = useCircuitStore((s) => s.addElement);
+  const beginMove = useCircuitStore((s) => s.beginMove);
+  const moveElement = useCircuitStore((s) => s.moveElement);
+  const select = useCircuitStore((s) => s.select);
+  const startWire = useCircuitStore((s) => s.startWire);
+  const addBend = useCircuitStore((s) => s.addBend);
+  const finishWire = useCircuitStore((s) => s.finishWire);
+  const finishWireOnWire = useCircuitStore((s) => s.finishWireOnWire);
+  const cancelWire = useCircuitStore((s) => s.cancelWire);
+  const toggleSwitch = useCircuitStore((s) => s.toggleSwitch);
+  const moveBend = useCircuitStore((s) => s.moveBend);
+  const insertBend = useCircuitStore((s) => s.insertBend);
+  const removeBend = useCircuitStore((s) => s.removeBend);
+  const pruneDeadBends = useCircuitStore((s) => s.pruneDeadBends);
+  const diagonalWires = useCircuitStore((s) => s.diagonalWires);
 
-  const [cellPx, setCellPx] = useState(GRID)
-  const [gridVisible, setGridVisible] = useState(true)
-  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
-  const [pan, setPan] = useState<Point>({ x: 0, y: 0 })
-  const [panning, setPanning] = useState(false)
+  const [cellPx, setCellPx] = useState(GRID);
+  const [gridVisible, setGridVisible] = useState(true);
+  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
+  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const [panning, setPanning] = useState(false);
 
-  const worldRef = useRef<SVGGElement>(null)
-  const scale = cellPx / GRID
+  const worldRef = useRef<SVGGElement>(null);
+  const scale = cellPx / GRID;
 
   const drag = useRef<{
-    id: string
-    dx: number
-    dy: number
-    moved: boolean
-  } | null>(null)
+    id: string;
+    dx: number;
+    dy: number;
+    moved: boolean;
+  } | null>(null);
 
   // Pan gesture: remembers where the pointer and the pan were when the button went down.
   const panDrag = useRef<{
-    x: number
-    y: number
-    panX: number
-    panY: number
-    active: boolean
-  } | null>(null)
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+    active: boolean;
+  } | null>(null);
 
-  const justPanned = useRef(false)
+ 
 
-  useKeyboardShortcuts()
+  useKeyboardShortcuts();
 
   /** Screen position -> world units. */
   const toWorld = useCallback((clientX: number, clientY: number): Point => {
-    const m = worldRef.current?.getScreenCTM()
+    const m = worldRef.current?.getScreenCTM();
 
-    if (!m) return { x: 0, y: 0 }
+    if (!m) return { x: 0, y: 0 };
 
-    const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse())
+    const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse());
 
-    return { x: p.x, y: p.y }
-  }, [])
+    return { x: p.x, y: p.y };
+  }, []);
 
   // ---- dragging parts -------------------------------------------------------
 
@@ -97,274 +102,380 @@ export function Canvas({
     e: ReactPointerEvent<SVGGElement>,
     el: CircuitElement,
   ) => {
-    e.stopPropagation()
+    e.stopPropagation();
 
-    if (draft) return
+    if (draft) return;
 
-    select({ kind: 'element', id: el.id })
-    e.currentTarget.setPointerCapture(e.pointerId)
+    select({ kind: "element", id: el.id });
+    e.currentTarget.setPointerCapture(e.pointerId);
 
-    const w = toWorld(e.clientX, e.clientY)
+    const w = toWorld(e.clientX, e.clientY);
 
     drag.current = {
       id: el.id,
       dx: w.x - el.x,
       dy: w.y - el.y,
       moved: false,
-    }
-  }
+    };
+  };
 
   const onElementPointerMove = (
     e: ReactPointerEvent<SVGGElement>,
     el: CircuitElement,
   ) => {
-    const d = drag.current
+    const d = drag.current;
 
-    if (!d || d.id !== el.id) return
+    if (!d || d.id !== el.id) return;
 
-    const w = toWorld(e.clientX, e.clientY)
+    const w = toWorld(e.clientX, e.clientY);
     const p = snapPoint({
       x: w.x - d.dx,
       y: w.y - d.dy,
-    })
+    });
 
-    if (el.x === p.x && el.y === p.y) return
+    if (el.x === p.x && el.y === p.y) return;
 
     if (!d.moved) {
-      beginMove()
-      d.moved = true
+      beginMove();
+      d.moved = true;
     }
 
-    moveElement(d.id, p.x, p.y)
-  }
+    moveElement(d.id, p.x, p.y);
+  };
 
   const onElementPointerUp = (e: ReactPointerEvent<SVGGElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId)
+      e.currentTarget.releasePointerCapture(e.pointerId);
     }
 
-    if (drag.current?.moved) pruneDeadBends()
+    if (drag.current?.moved) pruneDeadBends();
 
-    drag.current = null
-  }
+    drag.current = null;
+  };
 
   // ---- drop from the sidebar -----------------------------------------------
 
   const onDrop = (e: ReactDragEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    const type = e.dataTransfer.getData('text/plain')
+    const type = e.dataTransfer.getData("text/plain");
 
-    if (!isComponentType(type)) return
+    if (!isComponentType(type)) return;
 
-    const p = snapPoint(toWorld(e.clientX, e.clientY))
+    const p = snapPoint(toWorld(e.clientX, e.clientY));
 
-    addElement(type, p.x, p.y)
-  }
+    addElement(type, p.x, p.y);
+  };
 
   // ---- wiring ---------------------------------------------------------------
 
-  const onPinClick = (
-    e: ReactMouseEvent,
-    elementId: string,
-    pinId: string,
-  ) => {
-    e.stopPropagation()
+  const onPinClick = (e: ReactMouseEvent, elementId: string, pinId: string) => {
+    e.stopPropagation();
 
-    const ep = { kind: 'pin', elementId, pinId } as const
+    const ep = { kind: "pin", elementId, pinId } as const;
 
-    if (draft) finishWire(ep)
-    else startWire(ep)
-  }
+    if (draft) finishWire(ep);
+    else startWire(ep);
+  };
 
-  const onJunctionClick = (
-    e: ReactMouseEvent,
-    junctionId: string,
-  ) => {
-    e.stopPropagation()
+  const onJunctionClick = (e: ReactMouseEvent, junctionId: string) => {
+    e.stopPropagation();
 
-    const ep = { kind: 'junction', junctionId } as const
+    const ep = { kind: "junction", junctionId } as const;
 
-    if (draft) finishWire(ep)
-    else startWire(ep)
-  }
+    if (draft) finishWire(ep);
+    else startWire(ep);
+  };
 
   // ---- editing the bends of the selected wire ------------------------------
 
-  const bendDrag = useRef<{ moved: boolean } | null>(null)
+  const bendDrag = useRef<{ moved: boolean } | null>(null);
 
   const [activeBend, setActiveBend] = useState<{
-    wireId: string
-    index: number
-  } | null>(null)
+    wireId: string;
+    index: number;
+  } | null>(null);
 
   const onBendPointerDown = (
     e: ReactPointerEvent<SVGCircleElement>,
     wireId: string,
     index: number,
   ) => {
-    e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
 
-    bendDrag.current = { moved: false }
-    setActiveBend({ wireId, index })
-  }
+    bendDrag.current = { moved: false };
+    setActiveBend({ wireId, index });
+  };
 
   const onBendPointerMove = (
     e: ReactPointerEvent<SVGCircleElement>,
     wireId: string,
     index: number,
   ) => {
-    const d = bendDrag.current
+    const d = bendDrag.current;
 
-    if (!d) return
+    if (!d) return;
 
-    const p = snapPoint(toWorld(e.clientX, e.clientY))
-    const current = wires.find((w) => w.id === wireId)?.bends[index]
+    const p = snapPoint(toWorld(e.clientX, e.clientY));
+    const current = wires.find((w) => w.id === wireId)?.bends[index];
 
-    if (!current || (current.x === p.x && current.y === p.y)) return
+    if (!current || (current.x === p.x && current.y === p.y)) return;
 
     if (!d.moved) {
-      beginMove()
-      d.moved = true
+      beginMove();
+      d.moved = true;
     }
 
-    moveBend(wireId, index, p)
-  }
+    moveBend(wireId, index, p);
+  };
 
   const onBendPointerUp = (e: ReactPointerEvent<SVGCircleElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId)
+      e.currentTarget.releasePointerCapture(e.pointerId);
     }
 
-    if (bendDrag.current?.moved) pruneDeadBends()
+    if (bendDrag.current?.moved) pruneDeadBends();
 
-    bendDrag.current = null
-    setActiveBend(null)
-  }
+    bendDrag.current = null;
+    setActiveBend(null);
+  };
 
   /**
    * Double-click on a diagonal wire adds a bend where you clicked.
    */
   const onWireDoubleClick = (e: ReactMouseEvent, wireId: string) => {
-    e.stopPropagation()
+    e.stopPropagation();
 
-    const wire = wires.find((w) => w.id === wireId)
+    const wire = wires.find((w) => w.id === wireId);
 
-    if (!wire?.diagonal) return
+    if (!wire?.diagonal) return;
 
-    const path = wirePath(wire, { elements, junctions })
-    const hit = path && nearestOnPath(path, toWorld(e.clientX, e.clientY))
+    const path = wirePath(wire, { elements, junctions });
+    const hit = path && nearestOnPath(path, toWorld(e.clientX, e.clientY));
 
     if (hit) {
-      insertBend(wireId, hit.segment, snapPoint(hit.point))
+      insertBend(wireId, hit.segment, snapPoint(hit.point));
     }
-  }
+  };
 
   const onWireClick = (e: ReactMouseEvent, wireId: string) => {
-    e.stopPropagation()
+    e.stopPropagation();
 
     if (draft) {
-      finishWireOnWire(wireId, toWorld(e.clientX, e.clientY))
+      finishWireOnWire(wireId, toWorld(e.clientX, e.clientY));
     } else {
-      select({ kind: 'wire', id: wireId })
+      select({ kind: "wire", id: wireId });
     }
-  }
+  };
 
   // ---- clicking the empty canvas -------------------------------------------
 
   const onBackgroundClick = (e: ReactMouseEvent) => {
     if (justPanned.current) {
-      justPanned.current = false
-      return
+      justPanned.current = false;
+      return;
     }
 
     // Drawing a wire has priority over placing a new component.
     if (draft) {
-      addBend(snapPoint(toWorld(e.clientX, e.clientY)))
-      return
+      addBend(snapPoint(toWorld(e.clientX, e.clientY)));
+      return;
     }
 
     // Touch-friendly component placement.
     if (selectedComponent) {
-      const p = snapPoint(toWorld(e.clientX, e.clientY))
+      const p = snapPoint(toWorld(e.clientX, e.clientY));
 
-      addElement(selectedComponent, p.x, p.y)
-      onComponentPlaced()
-      return
+      addElement(selectedComponent, p.x, p.y);
+      onComponentPlaced();
+      return;
     }
 
-    select(null)
-  }
+    select(null);
+  };
 
   // ---- panning --------------------------------------------------------------
 
-  const PAN_THRESHOLD = 4
+  const PAN_THRESHOLD = 4;
 
-  const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
-    justPanned.current = false
+const onSvgPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+  justPanned.current = false
 
-    if (e.button !== 0 && e.button !== 1) return
+  if (e.button !== 0 && e.button !== 1) return
 
-    panDrag.current = {
+  if (e.pointerType === 'touch') {
+    touchPointers.current.set(e.pointerId, {
       x: e.clientX,
       y: e.clientY,
-      panX: pan.x,
-      panY: pan.y,
-      active: false,
-    }
-  }
+    })
 
-  const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    const d = panDrag.current
+    // Two fingers start pinch-to-zoom.
+    if (touchPointers.current.size === 2) {
+      const points = Array.from(touchPointers.current.values())
+      const [a, b] = points
 
-    if (d) {
-      if (
-        !d.active &&
-        Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD
-      ) {
-        d.active = true
-        justPanned.current = true
-        setPanning(true)
-        e.currentTarget.setPointerCapture(e.pointerId)
+      const midpoint = {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
       }
 
-      if (d.active) {
-        setPan({
-          x: d.panX + e.clientX - d.x,
-          y: d.panY + e.clientY - d.y,
-        })
+      const distance = Math.hypot(a.x - b.x, a.y - b.y)
+
+      pinch.current = {
+        startDistance: Math.max(distance, 1),
+        startCellPx: cellPx,
+        worldPoint: toWorld(midpoint.x, midpoint.y),
       }
-    }
 
-    if (draft) {
-      setCursor(snapPoint(toWorld(e.clientX, e.clientY)))
+      panDrag.current = null
+      justPanned.current = true
+      setPanning(true)
+
+      // Capture both fingers so the gesture remains active.
+      for (const pointerId of touchPointers.current.keys()) {
+        if (!e.currentTarget.hasPointerCapture(pointerId)) {
+          e.currentTarget.setPointerCapture(pointerId)
+        }
+      }
+
+      return
     }
   }
 
-  const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId)
+  panDrag.current = {
+    x: e.clientX,
+    y: e.clientY,
+    panX: pan.x,
+    panY: pan.y,
+    active: false,
+  }
+}
+
+ const onSvgPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+  if (e.pointerType === 'touch') {
+    const pointers = touchPointers.current
+
+    if (pointers.has(e.pointerId)) {
+      pointers.set(e.pointerId, {
+        x: e.clientX,
+        y: e.clientY,
+      })
     }
 
-    panDrag.current = null
-    setPanning(false)
+    // Update zoom while two fingers are active.
+    if (pinch.current && pointers.size >= 2) {
+      const points = Array.from(pointers.values())
+      const [a, b] = points
+
+      const distance = Math.hypot(a.x - b.x, a.y - b.y)
+
+      const midpoint = {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+      }
+
+      const rect = e.currentTarget.getBoundingClientRect()
+
+      const nextCellPx = Math.min(
+        MAX_CELL,
+        Math.max(
+          MIN_CELL,
+          Math.round(
+            pinch.current.startCellPx *
+              (distance / pinch.current.startDistance),
+          ),
+        ),
+      )
+
+      const nextScale = nextCellPx / GRID
+
+      // Keep the point between the fingers in the same world position.
+      setCellPx(nextCellPx)
+      setPan({
+        x: midpoint.x - rect.left - pinch.current.worldPoint.x * nextScale,
+        y: midpoint.y - rect.top - pinch.current.worldPoint.y * nextScale,
+      })
+
+      justPanned.current = true
+      return
+    }
   }
+
+  const d = panDrag.current
+
+  if (d) {
+    if (
+      !d.active &&
+      Math.hypot(e.clientX - d.x, e.clientY - d.y) > PAN_THRESHOLD
+    ) {
+      d.active = true
+      justPanned.current = true
+      setPanning(true)
+      e.currentTarget.setPointerCapture(e.pointerId)
+    }
+
+    if (d.active) {
+      setPan({
+        x: d.panX + e.clientX - d.x,
+        y: d.panY + e.clientY - d.y,
+      })
+    }
+  }
+
+  if (draft) {
+    setCursor(snapPoint(toWorld(e.clientX, e.clientY)))
+  }
+}
+
+ const onSvgPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+    e.currentTarget.releasePointerCapture(e.pointerId)
+  }
+
+  if (e.pointerType === 'touch') {
+    touchPointers.current.delete(e.pointerId)
+
+    if (pinch.current) {
+      pinch.current = null
+
+      // If one finger remains, allow it to continue panning.
+      const remaining = Array.from(touchPointers.current.values())[0]
+
+      if (remaining) {
+        panDrag.current = {
+          x: remaining.x,
+          y: remaining.y,
+          panX: pan.x,
+          panY: pan.y,
+          active: false,
+        }
+      } else {
+        panDrag.current = null
+      }
+
+      setPanning(false)
+      justPanned.current = true
+      return
+    }
+  }
+
+  panDrag.current = null
+  setPanning(false)
+}
 
   const onSvgWheel = (e: ReactWheelEvent<SVGSVGElement>) => {
-    const dx = e.shiftKey ? e.deltaY : e.deltaX
-    const dy = e.shiftKey ? 0 : e.deltaY
+    const dx = e.shiftKey ? e.deltaY : e.deltaX;
+    const dy = e.shiftKey ? 0 : e.deltaY;
 
     setPan((p) => ({
       x: p.x - dx,
       y: p.y - dy,
-    }))
-  }
+    }));
+  };
 
   // Live preview of the wire being drawn.
-  const start = draft
-    ? endpointPos(draft.from, elements, junctions)
-    : null
+  const start = draft ? endpointPos(draft.from, elements, junctions) : null;
 
   const previewD =
     draft && start
@@ -378,26 +489,22 @@ export function Canvas({
             diagonalWires,
           ),
         )
-      : null
+      : null;
 
-  const cell = cellPx
+  const cell = cellPx;
 
   return (
     <div
       className="relative h-full flex-1 select-none overflow-hidden bg-slate-50"
       onDrop={onDrop}
       onDragOver={(e) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'copy'
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
       }}
     >
       <svg
         className={`absolute inset-0 h-full w-full touch-none ${
-          panning
-            ? 'cursor-grabbing'
-            : draft
-              ? 'cursor-crosshair'
-              : ''
+          panning ? "cursor-grabbing" : draft ? "cursor-crosshair" : ""
         }`}
         onClick={onBackgroundClick}
         onPointerDown={onSvgPointerDown}
@@ -407,8 +514,8 @@ export function Canvas({
         onWheel={onSvgWheel}
         onContextMenu={(e) => {
           if (draft) {
-            e.preventDefault()
-            cancelWire()
+            e.preventDefault();
+            cancelWire();
           }
         }}
       >
@@ -421,18 +528,11 @@ export function Canvas({
             y={pan.y - cell / 2}
             patternUnits="userSpaceOnUse"
           >
-            <circle
-              cx={cell / 2}
-              cy={cell / 2}
-              r="1"
-              fill="#cbd5e1"
-            />
+            <circle cx={cell / 2} cy={cell / 2} r="1" fill="#cbd5e1" />
           </pattern>
         </defs>
 
-        {gridVisible && (
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        )}
+        {gridVisible && <rect width="100%" height="100%" fill="url(#grid)" />}
 
         <g
           ref={worldRef}
@@ -455,10 +555,7 @@ export function Canvas({
             <ElementView
               key={el.id}
               element={el}
-              selected={
-                selection?.kind === 'element' &&
-                selection.id === el.id
-              }
+              selected={selection?.kind === "element" && selection.id === el.id}
               onPointerDown={onElementPointerDown}
               onPointerMove={onElementPointerMove}
               onPointerUp={onElementPointerUp}
@@ -501,10 +598,10 @@ export function Canvas({
 
         <div className="pointer-events-none absolute right-full top-0 mr-2 hidden w-64 rounded-md bg-white px-3 py-2 text-xs text-gray-600 shadow-lg group-focus-within:block group-hover:block">
           {draft
-            ? 'Click canvas — add bend · click pin/wire — finish · D — diagonal/straight · Esc — cancel'
+            ? "Click canvas — add bend · click pin/wire — finish · D — diagonal/straight · Esc — cancel"
             : selectedComponent
-              ? 'Tap the canvas to place the selected component · Esc — cancel'
-              : 'Click pin — new wire · Drag canvas / wheel — pan · R — rotate · Del — delete · Ctrl+Z — undo'}
+              ? 'Tap the canvas to place the selected component'
+              : 'Click pin — new wire · Drag canvas / wheel — pan · Pinch — zoom · R — rotate · Del — delete · Ctrl+Z — undo'}
         </div>
       </div>
 
@@ -516,5 +613,5 @@ export function Canvas({
         onResetView={() => setPan({ x: 0, y: 0 })}
       />
     </div>
-  )
+  );
 }

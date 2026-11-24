@@ -210,7 +210,7 @@ export function CircuitWorkspace({
           </button>
 
           {settingsOpen && (
-            <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+            <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-gray-200 bg-white p-4 shadow-xl max-[899px]:bottom-full max-[899px]:top-auto max-[899px]:mb-2 max-[899px]:mt-0">
               <h3 className="mb-3 text-sm font-semibold text-gray-800">
                 Circuit settings
               </h3>
