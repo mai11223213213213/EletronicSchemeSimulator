@@ -272,13 +272,14 @@ export function CircuitWorkspace({
         </div>
       </div>
 
+
       {/* Right panels */}
-      <div className="pointer-events-none absolute bottom-16 right-4 top-14 z-20 flex w-72 flex-col gap-2 max-[899px]:bottom-16 max-[899px]:left-2 max-[899px]:right-2 max-[899px]:top-auto max-[899px]:max-h-[42%] max-[899px]:w-auto">
+      <div className="pointer-events-none absolute bottom-16 right-4 top-14 z-20 flex w-72 flex-col gap-2 max-[899px]:bottom-16 max-[899px]:left-2 max-[899px]:right-2 max-[899px]:top-auto max-[899px]:h-[42%] max-[899px]:max-h-[calc(100%-5rem)] max-[899px]:w-auto max-[899px]:overflow-hidden">
         <PropertiesPanel />
         <WirePanel />
 
         {readoutVisible && (
-          <div className="pointer-events-auto min-h-0 flex-1">
+          <div className="pointer-events-auto min-h-0 flex-1 overflow-hidden">
             <SimulationConsole />
           </div>
         )}

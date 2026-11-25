@@ -1,31 +1,30 @@
-
-import { useState } from 'react'
-import { RotateCw, Trash2, X } from 'lucide-react'
-import { REGISTRY } from '../model/registry'
-import { useCircuitStore } from '../store/circuitStore'
+import { useState } from "react";
+import { RotateCw, Trash2, X } from "lucide-react";
+import { REGISTRY } from "../model/registry";
+import { useCircuitStore } from "../store/circuitStore";
 
 export function PropertiesPanel() {
   const element = useCircuitStore((s) =>
-    s.selection?.kind === 'element'
+    s.selection?.kind === "element"
       ? s.elements.find((e) => e.id === s.selection!.id)
       : undefined,
-  )
+  );
 
-  const notice = useCircuitStore((s) => s.notice)
-  const setProp = useCircuitStore((s) => s.setProp)
-  const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
-  const rotateSelected = useCircuitStore((s) => s.rotateSelected)
-  const deleteSelected = useCircuitStore((s) => s.deleteSelected)
-  const select = useCircuitStore((s) => s.select)
+  const notice = useCircuitStore((s) => s.notice);
+  const setProp = useCircuitStore((s) => s.setProp);
+  const toggleSwitch = useCircuitStore((s) => s.toggleSwitch);
+  const rotateSelected = useCircuitStore((s) => s.rotateSelected);
+  const deleteSelected = useCircuitStore((s) => s.deleteSelected);
+  const select = useCircuitStore((s) => s.select);
 
-  if (!element) return null
+  if (!element) return null;
 
-  const def = REGISTRY[element.type]
-  const notes = notice?.elementId === element.id ? notice.notes : []
+  const def = REGISTRY[element.type];
+  const notes = notice?.elementId === element.id ? notice.notes : [];
 
   return (
     <div
-      className="pointer-events-auto max-h-[70%] shrink-0 overflow-y-auto rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur"
+      className="pointer-events-auto max-h-[70%] shrink-0 overflow-y-auto rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur max-[899px]:max-h-[35%]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -66,20 +65,22 @@ export function PropertiesPanel() {
         </div>
       </div>
 
-      {element.type === 'switch' && (
+      {element.type === "switch" && (
         <button
           type="button"
           onClick={() => toggleSwitch(element.id)}
           className="mb-2 w-full rounded border border-gray-300 bg-gray-50 px-2 py-1.5 text-sm text-gray-700 hover:bg-blue-50"
         >
-          {element.props.closed ? 'Closed — click to open' : 'Open — click to close'}
+          {element.props.closed
+            ? "Closed — click to open"
+            : "Open — click to close"}
         </button>
       )}
 
       {def.fields
         .filter((f) => f.show?.(element.props) ?? true)
         .map((f) => {
-          const value = Number(element.props[f.key] ?? def.defaults[f.key])
+          const value = Number(element.props[f.key] ?? def.defaults[f.key]);
 
           return (
             <label
@@ -115,7 +116,7 @@ export function PropertiesPanel() {
                 )}
               </span>
             </label>
-          )
+          );
         })}
 
       {def.readouts && (
@@ -149,7 +150,7 @@ export function PropertiesPanel() {
         R — rotate · Del — delete
       </p>
     </div>
-  )
+  );
 }
 
 function NumberField({
@@ -157,27 +158,27 @@ function NumberField({
   min,
   onCommit,
 }: {
-  value: number
-  min: number
-  onCommit: (v: number) => void
+  value: number;
+  min: number;
+  onCommit: (v: number) => void;
 }) {
-  const [draft, setDraft] = useState<string | null>(null)
+  const [draft, setDraft] = useState<string | null>(null);
 
   const finish = () => {
-    const v = Number(draft)
+    const v = Number(draft);
 
     if (
       draft !== null &&
-      draft.trim() !== '' &&
+      draft.trim() !== "" &&
       Number.isFinite(v) &&
       v >= min &&
       v !== value
     ) {
-      onCommit(v)
+      onCommit(v);
     }
 
-    setDraft(null)
-  }
+    setDraft(null);
+  };
 
   return (
     <input
@@ -189,9 +190,9 @@ function NumberField({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={finish}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === "Enter") e.currentTarget.blur();
       }}
       className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-right text-sm"
     />
-  )
+  );
 }

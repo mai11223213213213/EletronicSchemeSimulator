@@ -351,29 +351,7 @@ export function SimulationConsole() {
         </h2>
 
         <div className="flex items-center gap-1">
-          <div className="flex items-center gap-1 max-[899px]:hidden">
-            <button
-              type="button"
-              disabled={currentIndex === 0}
-              onClick={() => goTo(currentIndex - 1)}
-              aria-label="Previous readout"
-              className="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-10 text-center text-xs text-gray-500">
-              {slides.length ? `${currentIndex + 1}/${slides.length}` : '0/0'}
-            </span>
-            <button
-              type="button"
-              disabled={currentIndex >= slides.length - 1}
-              onClick={() => goTo(currentIndex + 1)}
-              aria-label="Next readout"
-              className="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+              
 
           <button
             type="button"

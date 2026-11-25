@@ -1,4 +1,3 @@
-
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -86,8 +85,7 @@ export function WireLayer({
         if (!points) return null;
 
         const path = toPathData(points);
-        const selected =
-          selection?.kind === "wire" && selection.id === wire.id;
+        const selected = selection?.kind === "wire" && selection.id === wire.id;
 
         return (
           <g key={wire.id}>
@@ -123,6 +121,7 @@ export function WireLayer({
               return (
                 <path
                   key={`segment-${index}`}
+                  data-wire-edit="true"
                   d={segmentPath}
                   stroke="transparent"
                   strokeWidth={Math.max(16 / scale, 10)}
@@ -136,9 +135,7 @@ export function WireLayer({
                   onPointerUp={onSegmentPointerUp}
                   onPointerCancel={onSegmentPointerUp}
                   onClick={(event) => onWireClick(event, wire.id)}
-                  onDoubleClick={(event) =>
-                    onWireDoubleClick(event, wire.id)
-                  }
+                  onDoubleClick={(event) => onWireDoubleClick(event, wire.id)}
                 />
               );
             })}
@@ -147,8 +144,7 @@ export function WireLayer({
             {selected &&
               wire.bends.map((bend, index) => {
                 const dragging =
-                  activeBend?.wireId === wire.id &&
-                  activeBend.index === index;
+                  activeBend?.wireId === wire.id && activeBend.index === index;
 
                 if (
                   !dragging &&
@@ -160,6 +156,7 @@ export function WireLayer({
                 return (
                   <g key={`bend-${index}`}>
                     <circle
+                      data-wire-edit="true"
                       cx={bend.x}
                       cy={bend.y}
                       r={handleRadius}
@@ -203,16 +200,9 @@ export function WireLayer({
           <g
             key={junction.id}
             className="cursor-pointer"
-            onClick={(event) =>
-              onJunctionClick(event, junction.id)
-            }
+            onClick={(event) => onJunctionClick(event, junction.id)}
           >
-            <circle
-              cx={junction.x}
-              cy={junction.y}
-              r="12"
-              fill="transparent"
-            />
+            <circle cx={junction.x} cy={junction.y} r="12" fill="transparent" />
             <circle
               cx={junction.x}
               cy={junction.y}
