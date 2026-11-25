@@ -24,7 +24,7 @@ export function PropertiesPanel() {
 
   return (
     <div
-      className="pointer-events-auto max-h-[70%] shrink-0 overflow-y-auto rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur max-[899px]:max-h-[38%]"
+      className="pointer-events-auto max-h-[70%] shrink-0 overflow-y-auto rounded-md border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur max-[899px]:max-h-[35vh]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
