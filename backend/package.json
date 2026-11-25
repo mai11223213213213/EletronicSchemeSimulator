@@ -5,16 +5,18 @@
   "license": "ISC",
   "type": "commonjs",
   "main": "src/index.ts",
-  "scripts": {
-    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
-    "start": "tsx src/server.ts",
-    "db:generate": "prisma generate",
-    "db:validate": "prisma validate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "tscheck": "tsc -p tsconfig.json --noEmit"
-  },
+"scripts": {
+  "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
+  "start": "tsx src/server.ts",
+  "build": "prisma generate",
+  "postinstall": "prisma generate",
+  "db:generate": "prisma generate",
+  "db:validate": "prisma validate",
+  "db:push": "prisma db push",
+  "db:migrate": "prisma migrate dev",
+  "db:studio": "prisma studio",
+  "tscheck": "tsc -p tsconfig.json --noEmit"
+},
   "dependencies": {
     "@prisma/client": "6.2.1",
     "bcryptjs": "^3.0.3",
