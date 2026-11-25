@@ -646,9 +646,9 @@ export function Canvas({ selectedComponent, onComponentPlaced }: CanvasProps) {
     }
 
     const isCanvasBackground =
-      target === e.currentTarget ||
-      (target.tagName.toLowerCase() === "rect" &&
-        target.parentElement === e.currentTarget);
+  target === e.currentTarget ||
+  (target.tagName.toLowerCase() === "rect" &&
+    target.parentNode === e.currentTarget);
 
     if (draft && isCanvasBackground && e.button === 0) {
       wireDrag.current = {
